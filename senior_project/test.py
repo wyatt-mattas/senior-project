@@ -12,7 +12,7 @@ from datetime import date
 #import matplotlib.dates as mpl_dates
 #import alphavantage
 import talib._ta_lib as ta
-#testing github
+
 iso_day = datetime.now()
 
 plt.style.use('ggplot')
