@@ -32,14 +32,27 @@ for i in range(len(df['close'])):
 	z = (df['ema15'][i]-df['ema40'][i])/df['ema40'][i]*100
 	new_df.loc[i] = [x,y,z,False,False]
 #new_df.to_csv('E:\senior_project\CEI_percentages.csv')
+check_true = False
 
 for i in range(1, len(df['close'])):
-	if df['ema5'][i] > df['ema15'][i] and df['ema5'][i] > df['ema40'][i] and df['ema15'][i] > df['ema40'][i] and (df['ema5'][i] - df['low'][i]) > 0.03 * df['high'][i]: # TODO make percantages into variables
-		sell_signals.append([df.index[i], df['high'][i]])
-		new_df.loc[i, 'sell_signal'] = True
+	if df['ema5'][i] > df['ema15'][i] and df['ema5'][i] > df['ema40'][i] and df['ema15'][i] > df['ema40'][i] and (df['ema5'][i] - df['low'][i]) > 0.03 * df['high'][i]: # TODO change the sell signal for better sells
+		if check_true == True:
+			print(f'{check_true}: {i}: sell is true')
+			sell_signals.append([df.index[i], df['high'][i]])
+			new_df.loc[i, 'sell_signal'] = True
+			check_true = False
+		else:
+			continue
+
 	if ((df['ema5'][i]-df['ema15'][i])/df['ema15'][i]*100) > 2 and ((df['ema5'][i]-df['ema40'][i])/df['ema40'][i]*100) < 4 and ((df['ema5'][i]-df['ema40'][i])/df['ema5'][i]*100) > 0.35 and df['ema5'][i] > df['ema40'][i] and ((df['ema15'][i]-df['ema40'][i])/df['ema40'][i]*100) < 0.5:
-		buy_signals.append([df.index[i], df['low'][i]])
-		new_df.loc[i,'buy_signal'] = True
+		if check_true == False:
+			print(f'{check_true}: {i}: buy is true')
+			buy_signals.append([df.index[i], df['low'][i]])
+			new_df.loc[i, 'buy_signal'] = True
+			check_true = True
+		else:
+			continue
+
 
 #print(new_df.head(80))
 new_df.to_csv('E:\\senior_project\\CEI_percentages.csv')
