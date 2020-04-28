@@ -34,7 +34,7 @@ for i in range(len(df['close'])):
 #new_df.to_csv('E:\senior_project\CEI_percentages.csv')
 
 for i in range(1, len(df['close'])):
-	if df['ema5'][i] > df['ema15'][i] and df['ema5'][i] > df['ema40'][i] and df['ema15'][i] > df['ema40'][i] and (df['ema5'][i] - df['low'][i]) > 0.03 * df['high'][i]:
+	if df['ema5'][i] > df['ema15'][i] and df['ema5'][i] > df['ema40'][i] and df['ema15'][i] > df['ema40'][i] and (df['ema5'][i] - df['low'][i]) > 0.03 * df['high'][i]: # TODO make percantages into variables
 		sell_signals.append([df.index[i], df['high'][i]])
 		new_df.loc[i, 'sell_signal'] = True
 	if ((df['ema5'][i]-df['ema15'][i])/df['ema15'][i]*100) > 2 and ((df['ema5'][i]-df['ema40'][i])/df['ema40'][i]*100) < 4 and ((df['ema5'][i]-df['ema40'][i])/df['ema5'][i]*100) > 0.35 and df['ema5'][i] > df['ema40'][i] and ((df['ema15'][i]-df['ema40'][i])/df['ema40'][i]*100) < 0.5:
