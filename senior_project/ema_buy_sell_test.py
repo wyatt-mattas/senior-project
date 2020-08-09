@@ -4,9 +4,17 @@ import pandas as pd
 import talib._ta_lib as ta
 from datetime import datetime
 import numpy
+from os import path as path
 
-df = pd.read_csv('E:\\senior_project\\CEI_get_barset_data.csv')
-
+stock = 'ABEO'
+if path.exists(f'E:\\senior_project\\ema_csv\\{stock}_EMAS.csv') == True:
+	df = pd.read_csv(f'E:\\senior_project\\ema_csv\\{stock}_EMAS.csv')
+else:
+	df = pd.read_csv(f'E:\\senior_project\\barset_data\\{stock}_get_barset_data.csv', skiprows=1) # skip the first row to make the dataframe easier to mess with when using barset data, don't need skip for historic_agg
+	df['ema5'] = ta.EMA(df['close'], timeperiod=5)
+	df['ema15'] = ta.EMA(df['close'], timeperiod=15)
+	df['ema40'] = ta.EMA(df['close'], timeperiod=40)
+	df.to_csv(f'E:\\senior_project\\ema_csv\\{stock}_EMAS.csv')
 
 #index = df.index
 '''for i in range(len(df['time'])):
@@ -17,45 +25,45 @@ df = pd.read_csv('E:\\senior_project\\CEI_get_barset_data.csv')
 #print(df['time'])
 
 
-df['ema5'] = ta.EMA(df['close'], timeperiod=5)
-df['ema15'] = ta.EMA(df['close'], timeperiod=15)
-df['ema40'] = ta.EMA(df['close'], timeperiod=40)
+# if path.exists(f'E:\\senior_project\\ema_csv\\{stock}_EMAS.csv') == False:
+# 	df['ema5'] = ta.EMA(df['close'], timeperiod=5)
+# 	df['ema15'] = ta.EMA(df['close'], timeperiod=15)
+# 	df['ema40'] = ta.EMA(df['close'], timeperiod=40)
+# 	df.to_csv(f'E:\\senior_project\\ema_csv\\{stock}_EMAS.csv')
+	#breakpoint()
+	#col_names = ['ema5/ema15','ema5/ema40','ema15/ema40', 'buy_signal', 'sell_signal']
 
-col_names = ['ema5/ema15','ema5/ema40','ema15/ema40', 'buy_signal', 'sell_signal']
-new_df = pd.DataFrame(columns=col_names, index=[0])
+	#new_df = pd.DataFrame(columns=col_names, index=[0])
 
 buy_signals = []
 sell_signals = []
-for i in range(len(df['close'])):
+'''for i in range(len(df['close'])):
 	x = (df['ema5'][i]-df['ema15'][i])/df['ema15'][i]*100
 	y = (df['ema5'][i]-df['ema40'][i])/df['ema40'][i]*100
 	z = (df['ema15'][i]-df['ema40'][i])/df['ema40'][i]*100
-	new_df.loc[i] = [x,y,z,False,False]
-#new_df.to_csv('E:\senior_project\CEI_percentages.csv')
-check_true = False
+	new_df.loc[i] = [x,y,z,False,False]'''
+#new_df.to_csv('E:\\senior_project\\ema_csv\\ABEO_percentages.csv')
+check_condition = False
 
 for i in range(1, len(df['close'])):
-	if df['ema5'][i] > df['ema15'][i] and df['ema5'][i] > df['ema40'][i] and df['ema15'][i] > df['ema40'][i] and (df['ema5'][i] - df['low'][i]) > 0.03 * df['high'][i]: # TODO change the sell signal for better sells
-		if check_true == True:
-			print(f'{check_true}: {i}: sell is true')
-			sell_signals.append([df.index[i], df['high'][i]])
-			new_df.loc[i, 'sell_signal'] = True
-			check_true = False
-		else:
-			continue
+	if (df['ema5'][i] > df['ema15'][i] and df['ema5'][i] > df['ema40'][i] and df['ema15'][i] > df['ema40'][i]):
+		if(df['ema5'][i-1] > df['ema15'][i-1] and df['ema5'][i-1] > df['ema40'][i-1] and df['ema15'][i-1] > df['ema40'][i-1]): # making sure the it is tending to move upwards
+			if (((df['ema5'][i]-df['ema15'][i])/df['ema15'][i]*100) > .5 and ((df['ema5'][i]-df['ema40'][i])/df['ema40'][i]*100) > 2):
+				if check_condition == True:
+					sell_signals.append([df.index[i], df['high'][i]])
+					check_condition = False
 
-	if ((df['ema5'][i]-df['ema15'][i])/df['ema15'][i]*100) > 2 and ((df['ema5'][i]-df['ema40'][i])/df['ema40'][i]*100) < 4 and ((df['ema5'][i]-df['ema40'][i])/df['ema5'][i]*100) > 0.35 and df['ema5'][i] > df['ema40'][i] and ((df['ema15'][i]-df['ema40'][i])/df['ema40'][i]*100) < 0.5:
-		if check_true == False:
-			print(f'{check_true}: {i}: buy is true')
-			buy_signals.append([df.index[i], df['low'][i]])
-			new_df.loc[i, 'buy_signal'] = True
-			check_true = True
-		else:
-			continue
+	if (df['ema5'][i] < df['ema15'][i] and df['ema5'][i] < df['ema40'][i] and df['ema15'][i] < df['ema40'][i]):
+		if (df['ema5'][i-1] < df['ema15'][i-1] and df['ema5'][i-1] < df['ema40'][i-1] and df['ema15'][i-1] < df['ema40'][i-1]):
+			if (df['ema5'][i-2] < df['ema15'][i-2] and df['ema5'][i-2] < df['ema40'][i-2] and df['ema15'][i-2] < df['ema40'][i-2]):
+				#if (((df['ema5'][i]-df['ema15'][i])/df['ema15'][i]*100) < 0):
+				if check_condition == False:
+					buy_signals.append([df.index[i], df['low'][i]])
+					check_condition = True
 
 
 #print(new_df.head(80))
-new_df.to_csv('E:\\senior_project\\CEI_percentages.csv')
+#new_df.to_csv('E:\\senior_project\\ema_csv\\ABEO_percentages.csv')
 
 candle = go.Candlestick(
     x=df.index,
@@ -73,9 +81,9 @@ sells = go.Scatter(x=[item[0] for item in sell_signals], y=[item[1] for item in 
 
 data = [candle, fema, mema, sema, buys, sells]
 
-fig = go.Figure(data = data)
+fig = go.Figure(data = data).update_layout(title='ABEO buy and sell')
 
 plot(fig)
-#fig.write_html('E:\\senior_project\\buy_graph.html')
+#fig.write_html('E:\\senior_project\\barset_plotly_graphs\\ABEO_buy_graph.html')
 
 #print(df)

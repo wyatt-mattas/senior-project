@@ -43,6 +43,11 @@ if account.status == 'ACTIVE':
     # How much of our portfolio to allocate to any one position
     #risk = 0.001
 
+    #print(type(api.get_barset(symbols='AAPL', timeframe='1Min', start='2018-01-03T10:00:00-04:00',end=pd.Timestamp(iso_day,tz='US/Eastern').isoformat()).df))
+
+    #barset = api.get_barset(symbols='AAPL', timeframe='1Min', start='2018-01-03T10:00:00-04:00',end=pd.Timestamp(iso_day,tz='US/Eastern').isoformat()).df
+    #print(barset.columns[0][0])
+
     def get_tickers(): # TODO need to make this the universe -- make this save to csv -- or could use api.add_watchlist()
         print('Getting current ticker data...')
         tickers = api.polygon.all_tickers()
@@ -57,15 +62,15 @@ if account.status == 'ACTIVE':
             ticker.todaysChangePerc >= 3.5
         )]
 
-    def historic_agg(symbols):
-        return api.polygon.historic_agg_v2(symbol=symbols, multiplier=1, _from='2018-01-03',to=date.today(), timespan='minute').df # TODO can maybe put in while loop with current time
+    def historic_ticker(symbols):
+        return api.get_barset(symbols=symbols, timeframe='1Min', start='2018-01-03T10:00:00-04:00',end=pd.Timestamp(iso_day,tz='US/Eastern').isoformat()).df # TODO change to day data instead
 
     def ticker_hist_data(symbols):
         #c = 0
         with concurrent.futures.ThreadPoolExecutor(
                 max_workers=150) as executor:
             results = {}
-            future_to_symbol = {executor.submit(historic_agg,symbol): symbol for symbol in symbols}
+            future_to_symbol = {executor.submit(historic_ticker,symbol): symbol for symbol in symbols}
             for future in concurrent.futures.as_completed(future_to_symbol):
                 symbol = future_to_symbol[future]
                 try:
@@ -80,9 +85,9 @@ if account.status == 'ACTIVE':
         df_list = list()
         for i in ticker_data:
             df = list_data[i]
-            df['ema5'] = ta.EMA(df['close'], timeperiod=5)
-            df['ema15'] = ta.EMA(df['close'], timeperiod=15)
-            df['ema40'] = ta.EMA(df['close'], timeperiod=40)
+            df['ema5'] = ta.EMA(df[i]['close'], timeperiod=5)
+            df['ema15'] = ta.EMA(df[i]['close'], timeperiod=15)
+            df['ema40'] = ta.EMA(df[i]['close'], timeperiod=40)
             df_list.append(df)
         return df_list
 
@@ -96,21 +101,27 @@ if account.status == 'ACTIVE':
     #new_data.to_csv('ticker_data.csv')
 
     all_data = calc_ema(data, ticker_list)
-    last_ticker = ticker_list[-1]
-    barset = api.get_barset(last_ticker, '1Min', start='2018-01-03T10:00:00-04:00',
-    end=pd.Timestamp(iso_day,tz='US/Eastern').isoformat()).df
-    print(barset.columns[0][0])
-    #barset.to_csv(f'E:\senior_project\{ticker_list[-1]}_get_barset_data.csv')
+    #for i in range(len(ticker_list)):
+        #last_ticker = ticker_list[i]
+        #barset = api.get_barset(last_ticker, '1Min', start='2018-01-03T10:00:00-04:00',end=pd.Timestamp(iso_day,tz='US/Eastern').isoformat()).df
+        #print(barset.columns[0][0])
+        #barset.to_csv(f'E:\\senior_project\\barset_data\\{ticker_list[i]}_get_barset_data.csv')
+
 
     # ---------------------------------------------
 
     new_data = all_data[-1]
-    print(new_data.tail(5))
+
+    print(type(new_data))
+
+    ticker_df_name = new_data.columns[0][0]
+    print(ticker_df_name)
+
     candle = go.Candlestick(
-		open = new_data['open'],
-		close = new_data['close'],
-		high = new_data['high'],
-		low = new_data['low'],
+		open = new_data[ticker_df_name]['open'],
+		close = new_data[ticker_df_name]['close'],
+		high = new_data[ticker_df_name]['high'],
+		low = new_data[ticker_df_name]['low'],
 		name = "Candlesticks")
 	# plot MAs
     fema = go.Scatter(y = new_data['ema5'], name = "Fast EMA", line = dict(color = ('rgba(102, 207, 255, 50)')))
@@ -125,8 +136,3 @@ if account.status == 'ACTIVE':
 
 else:
     print(account.status + 'need to try again later')
-
-
-# TODO need to use matplot lib or plotly to plot the stonks
-# TODO need to figure out ema for each stock - probably want 3
-# TODO talk to mac about calculos that about predicting ema's
