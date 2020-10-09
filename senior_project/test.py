@@ -91,21 +91,22 @@ if account.status == 'ACTIVE':
             df_list.append(df)
         return df_list
 
-    tickers = get_tickers()
-    ticker_list = [ticker.ticker for ticker in tickers]
-    ticker_list = sorted(ticker_list, key=str.lower)
+    #tickers = get_tickers()
+    #ticker_list = [ticker.ticker for ticker in tickers]
+    #ticker_list = sorted(ticker_list, key=str.lower)
+    ticker_list = ['AMD']
     print(ticker_list)
-    print(len(ticker_list))
+    #print(len(ticker_list))
 
     data = ticker_hist_data(ticker_list)
     #new_data.to_csv('ticker_data.csv')
 
     all_data = calc_ema(data, ticker_list)
-    #for i in range(len(ticker_list)):
-        #last_ticker = ticker_list[i]
-        #barset = api.get_barset(last_ticker, '1Min', start='2018-01-03T10:00:00-04:00',end=pd.Timestamp(iso_day,tz='US/Eastern').isoformat()).df
-        #print(barset.columns[0][0])
-        #barset.to_csv(f'E:\\senior_project\\barset_data\\{ticker_list[i]}_get_barset_data.csv')
+    for i in range(len(ticker_list)):
+        last_ticker = ticker_list[i]
+        barset = api.get_barset(last_ticker, '1Min', start='2018-01-03T10:00:00-04:00',end=pd.Timestamp(iso_day,tz='US/Eastern').isoformat()).df
+        print(barset.columns[0][0])
+        barset.to_csv(f'E:\\senior_project\\barset_data\\{ticker_list[i]}_get_barset_data.csv')
 
 
     # ---------------------------------------------

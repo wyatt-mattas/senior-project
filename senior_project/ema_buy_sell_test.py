@@ -6,7 +6,7 @@ from datetime import datetime
 import numpy
 from os import path as path
 
-stock = 'ABEO'
+stock = 'AMD'
 if path.exists(f'E:\\senior_project\\ema_csv\\{stock}_EMAS.csv') == True:
 	df = pd.read_csv(f'E:\\senior_project\\ema_csv\\{stock}_EMAS.csv')
 else:

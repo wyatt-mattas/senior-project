@@ -5,6 +5,7 @@ import pandas as pd
 import requests
 from alpaca_trade_api import StreamConn
 import asyncio
+import ast
 
 '''c=0
 while True:
@@ -33,24 +34,26 @@ max_share_price = 13.0
 # Minimum previous-day dollar volume for a stock we might consider
 min_last_dv = 500000
 
-def get_tickers(): # TODO need to make this the universe -- make this save to csv -- or could use api.add_watchlist()
-    print('Getting current ticker data...')
-    tickers = api.polygon.all_tickers()
-    print('Success.')
-    assets = api.list_assets()
-    symbols = [asset.symbol for asset in assets if asset.tradable]
-    return [ticker for ticker in tickers if (
-        ticker.ticker in symbols and
-        ticker.lastTrade['p'] >= min_share_price and
-        ticker.lastTrade['p'] <= max_share_price and
-        ticker.prevDay['v'] * ticker.lastTrade['p'] > min_last_dv and
-        ticker.todaysChangePerc >= 3.5
-    )]
+# def get_tickers(): # TODO need to make this the universe -- make this save to csv -- or could use api.add_watchlist()
+#     print('Getting current ticker data...')
+#     tickers = api.polygon.all_tickers()
+#     print('Success.')
+#     assets = api.list_assets()
+#     symbols = [asset.symbol for asset in assets if asset.tradable]
+#     return [ticker for ticker in tickers if (
+#         ticker.ticker in symbols and
+#         ticker.lastTrade['p'] >= min_share_price and
+#         ticker.lastTrade['p'] <= max_share_price and
+#         ticker.prevDay['v'] * ticker.lastTrade['p'] > min_last_dv and
+#         ticker.todaysChangePerc >= 3.5
+#     )]
 
-tickers = get_tickers()
-ticker_list = [ticker.ticker for ticker in tickers]
-ticker_list = sorted(ticker_list, key=str.lower)
-print(ticker_list)
+# tickers = get_tickers()
+# ticker_list = [ticker.ticker for ticker in tickers]
+# ticker_list = sorted(ticker_list, key=str.lower)
+# print(ticker_list)
+
+ticker_list = ['AMD']
 
 '''while True:
     for ticker in ticker_list:
@@ -74,7 +77,9 @@ async def on_minute_bars(conn, channel, bars):
     if bars.symbol in ticker_list:
         new_bar = bars._raw
         #print(type(new_bar))
-        print('bars', new_bar)
+        #final_bar = ast.literal_eval(new_bar)
+        #print(type(new_bar))
+        print('bars', new_bar) #already a dictionary
 
 @conn.on(r'^A$')
 async def on_second_bars(conn, channel, bar):
