@@ -21,6 +21,11 @@ account = api.get_account()
 
 if account.status == 'ACTIVE':
     session = requests.session()
+    
+    clock = api.get_clock()
+    print('The market is {}'.format('open.' if clock.is_open else 'closed.'))
+
+    check_condition = False
 
     stock = 'AMD'
     if path.exists(f'E:\\senior_project\\ema_csv\\{stock}_EMAS.csv') == True:
@@ -38,8 +43,64 @@ if account.status == 'ACTIVE':
     buy_signals = []
     sell_signals = []
 
+    def run(self):
+        # First, cancel any existing orders so they don't impact our buying power.
+        orders = self.alpaca.list_orders(status="open")
+        for order in orders:
+            self.alpaca.cancel_order(order.id)
 
-    check_condition = False
+        # Wait for market to open.
+        print("Waiting for market to open...")
+        tAMO = threading.Thread(target=self.awaitMarketOpen)
+        tAMO.start()
+        tAMO.join()
+        print("Market opened.")
+
+        # Rebalance the portfolio every minute, making necessary trades.
+        while True:
+
+        # Figure out when the market will close so we can prepare to sell beforehand.
+        clock = self.alpaca.get_clock()
+        closingTime = clock.next_close.replace(tzinfo=datetime.timezone.utc).timestamp()
+        currTime = clock.timestamp.replace(tzinfo=datetime.timezone.utc).timestamp()
+        self.timeToClose = closingTime - currTime
+
+        if(self.timeToClose < (60 * 15)):
+            # Close all positions when 15 minutes til market close.
+            print("Market closing soon.  Closing positions.")
+            positions = self.alpaca.list_positions()
+            for position in positions:
+                if(position.side == 'long'):
+                    orderSide = 'sell'
+                else:
+                    orderSide = 'buy'
+                qty = abs(int(float(position.qty)))
+                respSO = []
+                tSubmitOrder = threading.Thread(target=self.submitOrder(qty, position.symbol, orderSide, respSO))
+                tSubmitOrder.start()
+                tSubmitOrder.join()
+
+        # Run script again after market close for next trading day.
+            print("Sleeping until market close (15 minutes).")
+            time.sleep(60 * 15)
+        else:
+        # Rebalance the portfolio.
+            tRebalance = threading.Thread(target=self.rebalance)
+            tRebalance.start()
+            tRebalance.join()
+            time.sleep(60)
+
+    # Wait for market to open.
+    def awaitMarketOpen():
+        isOpen = self.alpaca.get_clock().is_open
+        while(not isOpen):
+            clock = self.alpaca.get_clock()
+            openingTime = clock.next_open.replace(tzinfo=datetime.timezone.utc).timestamp()
+            currTime = clock.timestamp.replace(tzinfo=datetime.timezone.utc).timestamp()
+            timeToOpen = int((openingTime - currTime) / 60)
+            print(str(timeToOpen) + " minutes til market open.")
+            time.sleep(60)
+            isOpen = self.alpaca.get_clock().is_open
 
     def calc_ema(dataframe):
         dataframe['ema5'] = ta.EMA(df['close'],timeperiod=5)
@@ -47,22 +108,25 @@ if account.status == 'ACTIVE':
         dataframe['ema40'] = ta.EMA(df['close'],timeperiod=40)
         return dataframe
 
-    def buy_sell_calc(check_condition):
-        for i in range(1, len(df['close'])):
-    	    if (df['ema5'][i] > df['ema15'][i] and df['ema5'][i] > df['ema40'][i] and df['ema15'][i] > df['ema40'][i]):
-    		    if(df['ema5'][i-1] > df['ema15'][i-1] and df['ema5'][i-1] > df['ema40'][i-1] and df['ema15'][i-1] > df['ema40'][i-1]): # making sure the it is tending to move upwards
-    			    if (((df['ema5'][i]-df['ema15'][i])/df['ema15'][i]*100) > .5 and ((df['ema5'][i]-df['ema40'][i])/df['ema40'][i]*100) > 2):
-    				    if check_condition == True:
-    					    sell_signals.append([df.index[i], df['high'][i]])
-    					    check_condition = False
+    def buy_sell_calc(check_condition, dataframe):
+        #for i in range(1, len(dataframe['close'])):
+        if (dataframe['ema5'][df.index[-1]] > dataframe['ema15'][df.index[-1]] and dataframe['ema5'][df.index[-1]] > dataframe['ema40'][df.index[-1]] and dataframe['ema15'][df.index[-1]] > dataframe['ema40'][df.index[-1]]):
+            if(dataframe['ema5'][df.index[-2]] > dataframe['ema15'][df.index[-2]] and dataframe['ema5'][df.index[-2]] > dataframe['ema40'][df.index[-2]] and dataframe['ema15'][df.index[-2]] > dataframe['ema40'][df.index[-2]]): # making sure the it is tending to move upwards
+                if (((dataframe['ema5'][df.index[-1]]-dataframe['ema15'][df.index[-1]])/dataframe['ema15'][df.index[-1]]*100) > .5 and ((dataframe['ema5'][df.index[-1]]-dataframe['ema40'][df.index[-1]])/dataframe['ema40'][df.index[-1]]*100) > 2):
+                    if check_condition == True:
+    					#sell_signals.append([df.index[i], df['high'][i]])
+                        check_condition = False
+                        print('sell')
 
-    	    if (df['ema5'][i] < df['ema15'][i] and df['ema5'][i] < df['ema40'][i] and df['ema15'][i] < df['ema40'][i]):
-    		    if (df['ema5'][i-1] < df['ema15'][i-1] and df['ema5'][i-1] < df['ema40'][i-1] and df['ema15'][i-1] < df['ema40'][i-1]):
-    			    if (df['ema5'][i-2] < df['ema15'][i-2] and df['ema5'][i-2] < df['ema40'][i-2] and df['ema15'][i-2] < df['ema40'][i-2]):
-    				    if check_condition == False:
-    					    buy_signals.append([df.index[i], df['low'][i]])
-    					    check_condition = True
+        if (dataframe['ema5'][df.index[-1]] < dataframe['ema15'][df.index[-1]] and dataframe['ema5'][df.index[-1]] < dataframe['ema40'][df.index[-1]] and dataframe['ema15'][df.index[-1]] < dataframe['ema40'][df.index[-1]]):
+            if (dataframe['ema5'][df.index[-2]] < dataframe['ema15'][df.index[-2]] and dataframe['ema5'][df.index[-2]] < dataframe['ema40'][df.index[-2]] and dataframe['ema15'][df.index[-2]] < dataframe['ema40'][df.index[-2]]):
+                if (dataframe['ema5'][df.index[-3]] < dataframe['ema15'][df.index[-3]] and dataframe['ema5'][df.index[-3]] < dataframe['ema40'][df.index[-3]] and dataframe['ema15'][df.index[-3]] < dataframe['ema40'][df.index[-3]]):
+                    if check_condition == False:
+    					#buy_signals.append([df.index[i], df['low'][i]])
+                        check_condition = True
+                        print('buy')
         return check_condition
+
 
     ticker_list = ['AMD']
     conn = StreamConn(base_url=base_url,key_id=api_key_id,secret_key=api_secret) #had comma at the end dont know if it was needed
@@ -78,11 +142,12 @@ if account.status == 'ACTIVE':
     @conn.on(r'^AM$')
     async def on_minute_bars(conn, channel, bars):
         global df
+        global check_condition
         if bars.symbol in ticker_list:
             new_bar = bars._raw
             #print(type(new_bar))
             print('bars', new_bar) #already a dictionary
-            del new_bar['symbol']#,'totalvolume','dailyopen','vwap','average','start','end']
+            del new_bar['symbol']# shorten this up
             del new_bar['totalvolume']
             del new_bar['dailyopen']
             del new_bar['vwap']
@@ -91,6 +156,8 @@ if account.status == 'ACTIVE':
             del new_bar['end']
             df = df.append(new_bar, ignore_index=True)
             calc_ema(df)
+            check_condition = buy_sell_calc(check_condition, df)
+            print('check condition: ', check_condition)
             print(df)
 
     @conn.on(r'^A$')
