@@ -1,9 +1,6 @@
-import plotly.graph_objects as go
-from plotly.offline import plot
 import pandas as pd
 import talib._ta_lib as ta
 from datetime import datetime
-import numpy
 from os import path as path
 import alpaca_trade_api as tradeapi
 import requests
@@ -22,16 +19,6 @@ api = tradeapi.REST(
     api_version='v2')
 account = api.get_account()
 
-def calc_ema(list_data, ticker_data):
-    df_list = list()
-    for i in ticker_data:
-        df = list_data[i]
-        df['ema5'] = ta.EMA(df[i]['close'], timeperiod=5)
-        df['ema15'] = ta.EMA(df[i]['close'], timeperiod=15)
-        df['ema40'] = ta.EMA(df[i]['close'], timeperiod=40)
-        df_list.append(df)
-    return df_list
-
 if account.status == 'ACTIVE':
     session = requests.session()
 
@@ -45,6 +32,7 @@ if account.status == 'ACTIVE':
     	df['ema40'] = ta.EMA(df['close'], timeperiod=40)
     	df.to_csv(f'E:\\senior_project\\ema_csv\\{stock}_EMAS.csv')
     df = df.drop(df.columns[1], axis=1)
+    df = df.drop(df.columns[0], axis=1)
     print(df)
 
     buy_signals = []
@@ -52,6 +40,12 @@ if account.status == 'ACTIVE':
 
 
     check_condition = False
+
+    def calc_ema(dataframe):
+        dataframe['ema5'] = ta.EMA(df['close'],timeperiod=5)
+        dataframe['ema15'] = ta.EMA(df['close'],timeperiod=15)
+        dataframe['ema40'] = ta.EMA(df['close'],timeperiod=40)
+        return dataframe
 
     def buy_sell_calc(check_condition):
         for i in range(1, len(df['close'])):
@@ -68,9 +62,10 @@ if account.status == 'ACTIVE':
     				    if check_condition == False:
     					    buy_signals.append([df.index[i], df['low'][i]])
     					    check_condition = True
+        return check_condition
 
     ticker_list = ['AMD']
-    conn = StreamConn(base_url=base_url,key_id=api_key_id,secret_key=api_secret,)
+    conn = StreamConn(base_url=base_url,key_id=api_key_id,secret_key=api_secret) #had comma at the end dont know if it was needed
 
     @conn.on(r'^account_updates$')
     async def on_account_updates(conn, channel, account):
@@ -82,11 +77,21 @@ if account.status == 'ACTIVE':
 
     @conn.on(r'^AM$')
     async def on_minute_bars(conn, channel, bars):
+        global df
         if bars.symbol in ticker_list:
             new_bar = bars._raw
             #print(type(new_bar))
             print('bars', new_bar) #already a dictionary
-            df.append(new_bar[5:9])
+            del new_bar['symbol']#,'totalvolume','dailyopen','vwap','average','start','end']
+            del new_bar['totalvolume']
+            del new_bar['dailyopen']
+            del new_bar['vwap']
+            del new_bar['average']
+            del new_bar['start']
+            del new_bar['end']
+            df = df.append(new_bar, ignore_index=True)
+            calc_ema(df)
+            print(df)
 
     @conn.on(r'^A$')
     async def on_second_bars(conn, channel, bar):
