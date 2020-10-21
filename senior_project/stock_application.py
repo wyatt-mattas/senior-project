@@ -1,6 +1,7 @@
 import pandas as pd
 import talib._ta_lib as ta
-from datetime import datetime, timedelta
+from datetime import timedelta
+import datetime
 from os import path as path
 import alpaca_trade_api as tradeapi
 import requests
@@ -11,12 +12,12 @@ import concurrent.futures
 import logging
 
 base_url = 'https://paper-api.alpaca.markets' # 'https://paper-api.alpaca.markets' - used for paper account
-api_key_id = 'PKK2HPWQFY9I25KIDVP9' # AKJUVZ2YL4C4J9XRVD2P -- paper trading(PKK2HPWQFY9I25KIDVP9)
-api_secret = 'IKSKvUlQp5iv9fGMkVlJ27pFiKqE0symg2KseZpQ' # Fms0oy3tdNp7K9E8oF13nFScWFuiECzXiShA2PTF -- paper trading(IKSKvUlQp5iv9fGMkVlJ27pFiKqE0symg2KseZpQ)
+api_key_id = 'PKK2HPWQFY9I25KIDVP9' #paper trading(PKK2HPWQFY9I25KIDVP9)
+api_secret = 'IKSKvUlQp5iv9fGMkVlJ27pFiKqE0symg2KseZpQ' #paper trading(IKSKvUlQp5iv9fGMkVlJ27pFiKqE0symg2KseZpQ)
 
 class Main:
     def __init__(self):
-
+        # initalize api
         self.api = tradeapi.REST(
             base_url=base_url,
             key_id=api_key_id,
@@ -27,9 +28,9 @@ class Main:
 
         self.check_condition = False
 
-        self.universe = 'AMD'
+        self.universe = 'AMD' # create the universe of stocks, will need to update code to handle list instead of just one stock
 
-        self.conn = StreamConn(base_url=base_url,key_id=api_key_id,secret_key=api_secret) #had comma at the end dont know if it was needed
+        self.conn = StreamConn(base_url=base_url,key_id=api_key_id,secret_key=api_secret)
 
     def prev_weekday(self, adate):
         # get previous open day
@@ -40,7 +41,7 @@ class Main:
 
     def grab_data(self):
         #get data from pervious market day
-        prev_date = self.prev_weekday(datetime.today())
+        prev_date = self.prev_weekday(datetime.datetime.today())
         prev_date = prev_date.strftime('%Y-%m-%d')
         calendar = self.api.get_calendar(start=prev_date, end=prev_date)[0]
         end_time = calendar.close
@@ -72,7 +73,7 @@ class Main:
             currTime = clock.timestamp.replace(tzinfo=datetime.timezone.utc).timestamp()
             self.timeToClose = closingTime - currTime
 
-            if(self.timeToClose < (60 * 10)):
+            if(self.timeToClose < (60 * 5)):
                 # Close all positions when 10 minutes til market close.
                 print("Market closing soon.  Closing positions.") #TODO want to sell all at end of day
                 positions = self.api.list_positions()
@@ -80,15 +81,15 @@ class Main:
                     if(position.side == 'long'):
                         orderSide = 'sell'
                     else:
-                        orderSide = 'buy'
+                        orderSide = 'sell'
                     qty = abs(int(float(position.qty)))
                     tSubmitOrder = threading.Thread(target=self.submitOrder(qty, position.symbol, orderSide))
                     tSubmitOrder.start()
                     tSubmitOrder.join()
 
-        # Run script again after market close for next trading day.
-                print("Sleeping until market close (15 minutes).")
-                time.sleep(60 * 15)
+                # Run script again after market close for next trading day.
+                print("Sleeping until market close (5 minutes).")
+                time.sleep(60 * 5)
             else:
                 #start stream conn on another thread
                 ws_thread = threading.Thread(target=self.ws_start)
@@ -105,8 +106,8 @@ class Main:
     # Wait for market to open.
     def awaitMarketOpen(self):
         isOpen = self.api.get_clock().is_open
+        self.df = self.grab_data()
         while(not isOpen):
-            self.df = self.grab_data()
             clock = self.api.get_clock()
             openingTime = clock.next_open.replace(tzinfo=datetime.timezone.utc).timestamp()
             currTime = clock.timestamp.replace(tzinfo=datetime.timezone.utc).timestamp()
