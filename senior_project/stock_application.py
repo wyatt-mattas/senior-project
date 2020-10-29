@@ -1,27 +1,17 @@
-#import pandas as pd
 import csv
 import talib._ta_lib as ta
 from datetime import timedelta
 import datetime
-#from os import path as path
 import alpaca_trade_api as tradeapi
 import requests
 from alpaca_trade_api import StreamConn
-#import threading
 import time
-#import concurrent.futures
-#import logging
-#import sys
 import asyncio
 from calendar import monthrange
-# import nest_asyncio
-# nest_asyncio.apply()
 
-#logger = logging.getLogger(__name__)
 base_url = 'https://paper-api.alpaca.markets' # 'https://paper-api.alpaca.markets' - used for paper account
-api_key_id = 'PKLIQDAA55PPU4YZEQEZ' #paper trading(PKK2HPWQFY9I25KIDVP9)
-api_secret = 'SnYX9janNUqheD4PrzrUDTH1Jghj3UUcVwy248BA' #paper trading(IKSKvUlQp5iv9fGMkVlJ27pFiKqE0symg2KseZpQ)
-#check_condition = False
+api_key_id = 'PPKOJHE0XLB51NJIRTSD9'
+api_secret = 'FyNX2EdLVKCGJ2Xo4yFq6rT5i9Qx1duhLVjmKE7E'
 
 class Main:
     def __init__(self, api):
@@ -255,14 +245,8 @@ async def get_clock():
     return isOpen
 
 if __name__ == '__main__':
-
     # main loop and should continue forever unless an error is thrown
     loop = asyncio.new_event_loop()
-    #loop.run_until_complete(run())
     loop.create_task(run())
     loop.create_task(subscribe())
-    # subscribe_loop = asyncio.new_event_loop()
-    # subscribe_loop.create_task(subscribe())
-    # subscribe_loop.run_forever()
     loop.run_forever()
-
