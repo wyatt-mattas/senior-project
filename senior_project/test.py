@@ -2,7 +2,7 @@ import alpaca_trade_api as tradeapi
 import requests
 import concurrent.futures
 import logging
-import matplotlib.pyplot as plt # TODO make candlestick chart for minutes to see how it looks
+#import matplotlib.pyplot as plt # TODO make candlestick chart for minutes to see how it looks
 #from mpl_finance import candlestick_ohlc
 import plotly.graph_objects as go
 from plotly.offline import plot
@@ -15,12 +15,12 @@ import talib._ta_lib as ta
 
 iso_day = datetime.now()
 
-plt.style.use('ggplot')
+#plt.style.use('ggplot')
 logger = logging.getLogger(__name__)
 
 base_url = 'https://paper-api.alpaca.markets' # 'https://paper-api.alpaca.markets' - used for paper account
-api_key_id = 'PKK2HPWQFY9I25KIDVP9' # AKJUVZ2YL4C4J9XRVD2P -- paper trading(PKK2HPWQFY9I25KIDVP9)
-api_secret = 'IKSKvUlQp5iv9fGMkVlJ27pFiKqE0symg2KseZpQ' # Fms0oy3tdNp7K9E8oF13nFScWFuiECzXiShA2PTF -- paper trading(IKSKvUlQp5iv9fGMkVlJ27pFiKqE0symg2KseZpQ)
+api_key_id = 'PKLIQDAA55PPU4YZEQEZ'
+api_secret = 'SnYX9janNUqheD4PrzrUDTH1Jghj3UUcVwy248BA'
 
 api = tradeapi.REST(
     base_url=base_url,
@@ -31,7 +31,54 @@ account = api.get_account()
 print(account.status) # make sure that account is active with if statement
 if account.status == 'ACTIVE':
     session = requests.session()
+    def run(self):
+        # First, cancel any existing orders so they don't impact our buying power.
+        orders = self._api.list_orders(status='open')
+        for order in orders:
+            self._api.cancel_order(order.id)
 
+        # Wait for market to open.
+        print('Waiting for market to open...')
+        loop = asyncio.new_event_loop()
+        loop.create_task(self.awaitMarketOpen)
+        loop.run_until_complete()
+        # tAMO = threading.Thread(target=self.awaitMarketOpen)
+        # tAMO.start()
+        # tAMO.join()
+        print('Market opened.')
+
+        #self.ws_thread.start()
+
+        # Rebalance the portfolio every minute, making necessary trades.
+        while True:
+            # Figure out when the market will close so we can prepare to sell beforehand.
+            #print('test')
+            clock = self._api.get_clock()
+            closingTime = clock.next_close.replace(tzinfo=datetime.timezone.utc).timestamp()
+            currTime = clock.timestamp.replace(tzinfo=datetime.timezone.utc).timestamp()
+            self.timeToClose = closingTime - currTime
+
+            if(self.timeToClose < (60 * 5)):
+                # Close all positions when 10 minutes til market close.
+                #self.ws_thread.join()
+                print('Market closing soon.  Closing positions.') #TODO get postions at end of day and start of next market see what I am starting with
+                positions = self._api.list_positions()
+                for position in positions:
+                    if(position.side == 'long'):
+                        orderSide = 'sell'
+                    else:
+                        orderSide = 'sell'
+                    qty = abs(int(float(position.qty)))
+                    tSubmitOrder = threading.Thread(target=self.submitOrder(qty, position.symbol, orderSide))
+                    tSubmitOrder.start()
+                    tSubmitOrder.join()
+
+                # Run script again after market close for next trading day.
+                print('Sleeping until market close (5 minutes).')
+                time.sleep(60 * 5)
+            else:
+                time.sleep(5)
+                continue
     #tickers = api.polygon.all_tickers()
     #assets = api.list_assets()
     min_share_price = 0.50
@@ -91,11 +138,13 @@ if account.status == 'ACTIVE':
             df_list.append(df)
         return df_list
 
-    #tickers = get_tickers()
-    #ticker_list = [ticker.ticker for ticker in tickers]
-    #ticker_list = sorted(ticker_list, key=str.lower)
-    ticker_list = ['AMD']
+    tickers = get_tickers()
+    ticker_list = [ticker.ticker for ticker in tickers]
+    ticker_list = sorted(ticker_list, key=str.lower)
+    print(len(ticker_list))
+    #ticker_list = ['AMD']
     print(ticker_list)
+    print('ok')
     #print(len(ticker_list))
 
     data = ticker_hist_data(ticker_list)
