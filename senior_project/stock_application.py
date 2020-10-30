@@ -10,11 +10,12 @@ import asyncio
 from calendar import monthrange
 
 base_url = 'https://paper-api.alpaca.markets' # 'https://paper-api.alpaca.markets' - used for paper account
-api_key_id = 'PPKOJHE0XLB51NJIRTSD9'
-api_secret = 'FyNX2EdLVKCGJ2Xo4yFq6rT5i9Qx1duhLVjmKE7E'
+api_key_id = 'PK5ZWFDF7U7RV6ARIM9V'
+api_secret = 'ieRKctKYi3NjVo6DjGOAkNjsd6sjLA4ollQiEEpA'
 
 class Main:
     def __init__(self, api):
+        # initalize some variables
         self._api = api
         self.min_share_price = 1.00
         self.max_share_price = 13.00
@@ -172,10 +173,11 @@ class Main:
 
 # create our connection to the api and streamconn for our up to date data
 api = tradeapi.REST(base_url=base_url,key_id=api_key_id,secret_key=api_secret,api_version='v2')
-conn = StreamConn(base_url=base_url,key_id=api_key_id,secret_key=api_secret)
+conn = StreamConn(base_url=base_url,key_id=api_key_id,secret_key=api_secret,debug=True)
 
 ema = Main(api)
 #channels = ['AM.' + symbol for symbol in symbols]
+data = []
 
 # wait for the market to open
 async def awaitMarketOpen():
@@ -187,12 +189,17 @@ async def awaitMarketOpen():
         timeToOpen = int((openingTime - currTime) / 60)
         print(str(timeToOpen) + ' minutes til market open.')
         # when there is a 5 minutes till open we want to grab our data
-        if(timeToOpen == 5):
-            global df_ticker_list
-            global ticker_list
-            df_ticker_list, ticker_list = await ema.grab_data()
+        # if(timeToOpen == 5):
+        #     global df_ticker_list
+        #     global ticker_list
+        #     df_ticker_list, ticker_list = await ema.grab_data()
         time.sleep(60)
         isOpen = api.get_clock().is_open
+    if (isOpen == True):
+        global df_ticker_list
+        global ticker_list
+        df_ticker_list, ticker_list = await ema.grab_data()
+        #print(df_ticker_list['ABEO'])
 
 async def run():
     # Wait for market to open.
@@ -208,35 +215,54 @@ async def on_account_updates(conn, channel, account):
 # get the minute data of the stocks that we want
 @conn.on(r'^AM.*$')
 async def on_minute_bars(conn, channel, bars):
-    if bars.symbol in ticker_list: # make sure we are messing only with the stocks that we want
-        global df_ticker_list
-        new_bar = bars._raw
-        function_bar = bars._raw
-        del new_bar['symbol']# TODO shorten this up only append what is needed instead of deleting it
-        del new_bar['totalvolume']
-        del new_bar['vwap']
-        del new_bar['average']
-        del new_bar['start']
-        del new_bar['end']
-        del new_bar['timestamp']
-        print(new_bar)
-        # run the calculations that we need to per stock
-        # TODO might need to make this all async, might take to long to run
-        df_ticker_list[function_bar['symbol']] = df_ticker_list[function_bar['symbol']].append(new_bar, ignore_index=True)
-        df_ticker_list[function_bar['symbol']] = ema.calc_ema(df_ticker_list[function_bar['symbol']])
-        ema.buy_sell_calc(df_ticker_list[function_bar['symbol']], function_bar)
-        print(df_ticker_list[function_bar['symbol']])
+    #if bars.symbol in ticker_list: # make sure we are messing only with the stocks that we want
+    global df_ticker_list
+    new_bar = bars._raw
+    print(new_bar)
+    # function_bar = bars._raw
+    data.append(new_bar)
+    # await print(df_ticker_list[function_bar['symbol']])
+    # del new_bar['symbol']# TODO shorten this up only append what is needed instead of deleting it
+    # del new_bar['totalvolume']
+    # del new_bar['vwap']
+    # del new_bar['average']
+    # del new_bar['start']
+    # del new_bar['end']
+    # del new_bar['timestamp']
+    # print(new_bar)
+    # run the calculations that we need to per stock
+    # TODO might need to make this all async, might take to long to run
+    #await asyncio.sleep(.05)
+    # print(df_ticker_list[function_bar['symbol']])# = df_ticker_list[function_bar['symbol']].append(new_bar, ignore_index=True)
+    #print(df_ticker_list[function_bar['symbol']])
+    # df_ticker_list[function_bar['symbol']] = ema.calc_ema(df_ticker_list[function_bar['symbol']])
+    # ema.buy_sell_calc(df_ticker_list[function_bar['symbol']], function_bar)
+    # print(df_ticker_list[function_bar['symbol']])
+
+#TODO might need to grab all data in a list and do all calculations outside of the AM function
+async def calc_everything(data_list):
+    for i in data_list:
+        df_ticker_list[i['symbol']] = df_ticker_list[i['symbol']].append(i['open'],i['close'],i['high'],i['low'],i['volume'], ignore_index=True)
+        print(df_ticker_list[i['symbol']])
+        df_ticker_list[i['symbol']] = ema.calc_ema(df_ticker_list[i['symbol']])
+        ema.buy_sell_calc(df_ticker_list[i['symbol']], i)
+        print(df_ticker_list[i['symbol']])
+    data_list = []
 
 # main loop of getting minute data
 async def subscribe():
+    channels = ['AM.' + symbol for symbol in ticker_list]
+    #print(channels)
     await get_clock()
     while(await get_clock() == True): # making sure the market is still open
-        await conn.subscribe(['AM.*'])
+        await conn.subscribe(channels)
+        if (data != []):
+            await calc_everything(data)
         await get_clock()
         print(await get_clock())
         await asyncio.sleep(10)
         if(await get_clock() == False): # if the market closed we unsubscribe from the tickers
-            await conn.unsubscribe(['AM.*'])
+            await conn.unsubscribe(channels) #TODO need to make a loop so the run function will run after market closes
             print('Finished')
 
 # get clock from api to see if the stock market is open -- returns a bool
