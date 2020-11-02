@@ -13,6 +13,7 @@ import concurrent.futures
 base_url = 'https://paper-api.alpaca.markets' # 'https://paper-api.alpaca.markets' - used for paper account
 api_key_id = 'PK9XU6G5CC77W5WL1AIS'
 api_secret = 'PIH84fvxhYh37k4Bxp1ieEOcyiCZnxkLYufW2FzV'
+#TODO need to work on shorting the market instead of just selling
 
 class Main:
     def __init__(self, api):
@@ -58,9 +59,8 @@ class Main:
         calendar = self._api.get_calendar(start=date, end=date)[0]
         closest_to_end_of_month = calendar.date.strftime('%Y-%m-%d')
         f = open("end_of_month.txt", "w")
-        f.write(closest_to_end_of_month)
+        f.write(closest_to_end_of_month) # overwrite file to new date
         f.close()
-        #return closest_to_end_of_month
 
     #grab data for each stock that is in the list
     async def grab_data(self):
@@ -68,20 +68,20 @@ class Main:
         today = datetime.datetime.today()
         today = today.strftime('%Y-%m-%d')
 
-        if(today == end_of_month):
+        if(today == end_of_month): # grab new list of tickers for the month, might want to change to every two weeks
             self.get_new_date()
             ticker_list = self.get_tickers()
             with open('ticker_list.csv', 'w') as myfile:
                 wr = csv.writer(myfile)
-                wr.writerow(ticker_list)
+                wr.writerow(ticker_list) # overwrite csv file with list of new tickers
             positions = self._api.list_positions()
             if positions != [] :
                 for position in positions:
                     if(position.side == 'long'):
-                        if(position.symbol not in ticker_list):
+                        if(position.symbol not in ticker_list): # want to sell off tickers that have not close yet 
                             qty = abs(int(float(position.qty)))
-                            self._api.submit_order(position.symbol, qty, 'sell', 'market', 'day')
-        # read the ticker list from
+                            self._api.submit_order(position.symbol, qty, 'sell', 'market', 'day') # TODO might want to change this
+        # read the ticker list from text file
         with open('ticker_list.csv', newline='') as f:
             reader = csv.reader(f)
             ticker_list = list(reader)
@@ -96,13 +96,10 @@ class Main:
         end_date = f'{prev_date}T{end_time}-04:00'
         # create a list of dataframes with names that are the tickers so they are easily called and manipulated
         df_list = {}
-        for ticker in ticker_list:
+        for ticker in ticker_list: # TODO can mabe use workers for this as well
             df_list[f'{ticker}'] = self._api.get_barset(symbols=ticker, timeframe='1Min', start=prev_date,end=end_date, limit=50).df
-            #print(df_list[f'{ticker}'])
             df_list[f'{ticker}'].columns = df_list[f'{ticker}'].columns.droplevel()
-            #print(df_list[f'{ticker}'])
             df_list[f'{ticker}'] = self.calc_ema(df_list[f'{ticker}'])
-            #print(df_list[f'{ticker}'])
         return df_list, ticker_list
 
     # calculate the moving average for the dataframe
