@@ -145,7 +145,7 @@ class Main:
 
     # calculate the number of stocks that we want to buy
     def calc_num_of_stocks(self, stock):
-        portfolio_value = float(api.get_account().portfolio_value)
+        portfolio_value = float(api.get_account().buying_power) # TODO might make this equity
         rough_number = (portfolio_value * self.risk) / stock['low']
         quantity = round(rough_number) # make sure it is an even number
         if (quantity < 1):
@@ -184,13 +184,11 @@ class Main:
 api = tradeapi.REST(base_url=base_url,key_id=api_key_id,secret_key=api_secret,api_version='v2')
 conn = StreamConn(base_url=base_url,key_id=api_key_id,secret_key=api_secret)
 
+# global variables
 ema = Main(api)
-#channels = ['AM.' + symbol for symbol in symbols]
 data = []
 df_ticker_list = []
 ticker_list = []
-# global ticker_list
-# global df_ticker_list
 channels = []
 
 # wait for the market to open
@@ -211,30 +209,17 @@ async def awaitMarketOpen():
             channels = ['AM.' + symbol for symbol in ticker_list]
         time.sleep(60)
         isOpen = api.get_clock().is_open
-    #if (isOpen == True):
-    # global df_ticker_list
-    # global ticker_list
-    # global channels
-    # df_ticker_list, ticker_list = await ema.grab_data()
-    # channels = ['AM.' + symbol for symbol in ticker_list]
-        #print(df_ticker_list['ABEO'])
 
+# Wait for market to open
 async def run_await():
-    # Wait for market to open.
     print('Waiting for market to open...')
     await awaitMarketOpen()
     print('Market opened.')
-
-
-@conn.on(r'^account_updates$')
-async def on_account_updates(conn, channel, account):
-    print('account', account)
 
 # get the minute data of the stocks that we want
 @conn.on(r'^AM.*$')
 async def on_minute_bars(conn, channel, bars):
     new_bar = bars._raw
-    #print(new_bar)
     data.append(new_bar)
     # Append minute data to list otherwise packets will time out and cause an error
 
@@ -246,36 +231,29 @@ def calc_everything(data_list):
     df_ticker_list[symbol] = ema.calc_ema(df_ticker_list[symbol])
     ema.buy_sell_calc(df_ticker_list[symbol], data_list)
 
-
+# using ThreadPoolExecutor run calc_everything using workers to increase speed of program
 def calc_faster(data_list):
     with concurrent.futures.ThreadPoolExecutor(
                 max_workers=150) as executor:
             {executor.submit(calc_everything,i): i for i in data_list}
-    data_list.clear()
+    data_list.clear() # clear data list so there can be new data in an empty list
 
 # main loop of getting minute data
 async def subscribe():
-    while True:
+    while True: # making the loop run forever
         await run_await()
         isOpen = api.get_clock().is_open
         global channels
-        if (isOpen == True):
-            while(isOpen == True): # making sure the market is still open
-                await conn.subscribe(channels)
-                #print(data)
-                if (data != []):
-                    calc_faster(data)
-                isOpen = api.get_clock().is_open
-                #print(await get_clock())
-                #await asyncio.sleep(10)
-                if(isOpen == False):
-                    await conn.unsubscribe(channels)
-                    print('Market Closed')
-
-# get clock from api to see if the stock market is open -- returns a bool
-async def get_clock():
-    isOpen = api.get_clock().is_open
-    return isOpen
+        while(isOpen == True): # making sure the market is still open
+            await conn.subscribe(channels) # get data for the stock that we want
+            if (data != []):
+                calc_faster(data)
+            isOpen = api.get_clock().is_open
+            #print(await get_clock())
+            await asyncio.sleep(10) # sleep otherwise is_open will timeout
+            if(isOpen == False):
+                await conn.unsubscribe(channels)
+                print('Market Closed')
 
 if __name__ == '__main__':
     # main loop and should continue forever unless an error is thrown
