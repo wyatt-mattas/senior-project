@@ -122,7 +122,7 @@ class Main:
                     if self.get_positions_sell(ticker_symbol) is not None:
                         qty, orderside = self.get_positions_sell(ticker_symbol)
                         if orderside == 'long':
-                            self.submitOrder(qty,ticker_symbol,'sell') #TODO change this to certain amount based on what is in account
+                            self.submitOrder(qty,ticker_symbol,'sell')
 
         if (dataframe['ema5'][dataframe.index[-1]] < dataframe['ema15'][dataframe.index[-1]] and dataframe['ema5'][dataframe.index[-1]] < dataframe['ema40'][dataframe.index[-1]] and dataframe['ema15'][dataframe.index[-1]] < dataframe['ema40'][dataframe.index[-1]]):
             if (dataframe['ema5'][dataframe.index[-2]] < dataframe['ema15'][dataframe.index[-2]] and dataframe['ema5'][dataframe.index[-2]] < dataframe['ema40'][dataframe.index[-2]] and dataframe['ema15'][dataframe.index[-2]] < dataframe['ema40'][dataframe.index[-2]]):
