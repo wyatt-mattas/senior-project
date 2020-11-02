@@ -1,5 +1,4 @@
 import csv
-from ssl import CHANNEL_BINDING_TYPES
 import talib._ta_lib as ta
 from datetime import timedelta
 import datetime
@@ -9,10 +8,11 @@ from alpaca_trade_api import StreamConn
 import time
 import asyncio
 from calendar import monthrange
+import concurrent.futures
 
 base_url = 'https://paper-api.alpaca.markets' # 'https://paper-api.alpaca.markets' - used for paper account
-api_key_id = 'PK5ZWFDF7U7RV6ARIM9V'
-api_secret = 'ieRKctKYi3NjVo6DjGOAkNjsd6sjLA4ollQiEEpA'
+api_key_id = 'PK9XU6G5CC77W5WL1AIS'
+api_secret = 'PIH84fvxhYh37k4Bxp1ieEOcyiCZnxkLYufW2FzV'
 
 class Main:
     def __init__(self, api):
@@ -21,7 +21,7 @@ class Main:
         self.min_share_price = 1.00
         self.max_share_price = 13.00
         self.min_last_dv = 500000
-        self.risk = 0.001
+        self.risk = 0.01
 
     # get a list of tickers that meet a certain criteria
     def get_tickers(self):
@@ -64,7 +64,7 @@ class Main:
 
     #grab data for each stock that is in the list
     async def grab_data(self):
-        end_of_month = open('end_of_month.txt', 'r')
+        end_of_month = open('end_of_month.txt', 'r').read()
         today = datetime.datetime.today()
         today = today.strftime('%Y-%m-%d')
 
@@ -119,10 +119,10 @@ class Main:
         if (dataframe['ema5'][dataframe.index[-1]] > dataframe['ema15'][dataframe.index[-1]] and dataframe['ema5'][dataframe.index[-1]] > dataframe['ema40'][dataframe.index[-1]] and dataframe['ema15'][dataframe.index[-1]] > dataframe['ema40'][dataframe.index[-1]]):
             if(dataframe['ema5'][dataframe.index[-2]] > dataframe['ema15'][dataframe.index[-2]] and dataframe['ema5'][dataframe.index[-2]] > dataframe['ema40'][dataframe.index[-2]] and dataframe['ema15'][dataframe.index[-2]] > dataframe['ema40'][dataframe.index[-2]]): # making sure the it is tending to move upwards
                 if (((dataframe['ema5'][dataframe.index[-1]]-dataframe['ema15'][dataframe.index[-1]])/dataframe['ema15'][dataframe.index[-1]]*100) > .5 and ((dataframe['ema5'][dataframe.index[-1]]-dataframe['ema40'][dataframe.index[-1]])/dataframe['ema40'][dataframe.index[-1]]*100) > 2):
-                    qty, orderside = self.get_positions_sell(ticker_symbol)
-                    if orderside == 'long':
-                        self.submitOrder(qty,ticker,'sell') #TODO change this to certain amount based on what is in account
-                        print('sell')
+                    if self.get_positions_sell(ticker_symbol) is not None:
+                        qty, orderside = self.get_positions_sell(ticker_symbol)
+                        if orderside == 'long':
+                            self.submitOrder(qty,ticker_symbol,'sell') #TODO change this to certain amount based on what is in account
 
         if (dataframe['ema5'][dataframe.index[-1]] < dataframe['ema15'][dataframe.index[-1]] and dataframe['ema5'][dataframe.index[-1]] < dataframe['ema40'][dataframe.index[-1]] and dataframe['ema15'][dataframe.index[-1]] < dataframe['ema40'][dataframe.index[-1]]):
             if (dataframe['ema5'][dataframe.index[-2]] < dataframe['ema15'][dataframe.index[-2]] and dataframe['ema5'][dataframe.index[-2]] < dataframe['ema40'][dataframe.index[-2]] and dataframe['ema15'][dataframe.index[-2]] < dataframe['ema40'][dataframe.index[-2]]):
@@ -131,7 +131,6 @@ class Main:
                     if can_buy == True:
                         quantity = self.calc_num_of_stocks(ticker)
                         self.submitOrder(quantity,ticker_symbol,'buy')
-                        print('buy')
 
     # function for submitting the order
     def submitOrder(self, qty, stock, side):
@@ -175,7 +174,11 @@ class Main:
             for position in positions:
                 if (position.symbol != ticker):
                     can_buy = True
-                    return can_buy
+                elif(position.symbol == ticker):
+                    can_buy = False
+                    break
+            return can_buy
+
 
 # create our connection to the api and streamconn for our up to date data
 api = tradeapi.REST(base_url=base_url,key_id=api_key_id,secret_key=api_secret,api_version='v2')
@@ -184,8 +187,11 @@ conn = StreamConn(base_url=base_url,key_id=api_key_id,secret_key=api_secret)
 ema = Main(api)
 #channels = ['AM.' + symbol for symbol in symbols]
 data = []
-# df_ticker_list = []
-# ticker_list = []
+df_ticker_list = []
+ticker_list = []
+# global ticker_list
+# global df_ticker_list
+channels = []
 
 # wait for the market to open
 async def awaitMarketOpen():
@@ -205,13 +211,15 @@ async def awaitMarketOpen():
             channels = ['AM.' + symbol for symbol in ticker_list]
         time.sleep(60)
         isOpen = api.get_clock().is_open
-    # if (isOpen == True):
-    #     global df_ticker_list
-    #     global ticker_list
-    #     df_ticker_list, ticker_list = await ema.grab_data()
+    #if (isOpen == True):
+    # global df_ticker_list
+    # global ticker_list
+    # global channels
+    # df_ticker_list, ticker_list = await ema.grab_data()
+    # channels = ['AM.' + symbol for symbol in ticker_list]
         #print(df_ticker_list['ABEO'])
 
-async def run():
+async def run_await():
     # Wait for market to open.
     print('Waiting for market to open...')
     await awaitMarketOpen()
@@ -225,42 +233,44 @@ async def on_account_updates(conn, channel, account):
 # get the minute data of the stocks that we want
 @conn.on(r'^AM.*$')
 async def on_minute_bars(conn, channel, bars):
-    #if bars.symbol in ticker_list: # make sure we are messing only with the stocks that we want
-    global df_ticker_list
     new_bar = bars._raw
-    print(new_bar)
+    #print(new_bar)
     data.append(new_bar)
     # Append minute data to list otherwise packets will time out and cause an error
 
-# Calculate what do do with every stock and update every stock in list, might need to make this work with workers to speed it up
-async def calc_everything(data_list):
-    for i in data_list:
-        df_ticker_list[i['symbol']] = df_ticker_list[i['symbol']].append(i['open'],i['close'],i['high'],i['low'],i['volume'], ignore_index=True)
-        print(df_ticker_list[i['symbol']])
-        df_ticker_list[i['symbol']] = ema.calc_ema(df_ticker_list[i['symbol']])
-        ema.buy_sell_calc(df_ticker_list[i['symbol']], i)
-        print(df_ticker_list[i['symbol']])
-    data_list = []
+# Calculate what do do with every stock and update every stock in list
+def calc_everything(data_list):
+    y = {'open': data_list['open'],'high':data_list['high'],'low':data_list['low'],'close':data_list['close'],'volume':data_list['volume']}
+    symbol = data_list['symbol']
+    df_ticker_list[symbol] = df_ticker_list[symbol].append(y, ignore_index=True)
+    df_ticker_list[symbol] = ema.calc_ema(df_ticker_list[symbol])
+    ema.buy_sell_calc(df_ticker_list[symbol], data_list)
+
+
+def calc_faster(data_list):
+    with concurrent.futures.ThreadPoolExecutor(
+                max_workers=150) as executor:
+            {executor.submit(calc_everything,i): i for i in data_list}
+    data_list.clear()
 
 # main loop of getting minute data
 async def subscribe():
-    #print(channels)
-    await get_clock()
-    if (await get_clock() == False):
-        await run()
-        await get_clock()
+    while True:
+        await run_await()
+        isOpen = api.get_clock().is_open
         global channels
-    if (await get_clock() == True):
-        while(await get_clock() == True): # making sure the market is still open
-            await conn.subscribe(channels)
-            if (data != []):
-                await calc_everything(data)
-            await get_clock()
-            print(await get_clock())
-            await asyncio.sleep(10)
-            if(await get_clock() == False): # if the market closed we unsubscribe from the tickers
-                await conn.unsubscribe(channels) #TODO need to make a loop so the run function will run after market closes
-                print('Finished')
+        if (isOpen == True):
+            while(isOpen == True): # making sure the market is still open
+                await conn.subscribe(channels)
+                #print(data)
+                if (data != []):
+                    calc_faster(data)
+                isOpen = api.get_clock().is_open
+                #print(await get_clock())
+                #await asyncio.sleep(10)
+                if(isOpen == False):
+                    await conn.unsubscribe(channels)
+                    print('Market Closed')
 
 # get clock from api to see if the stock market is open -- returns a bool
 async def get_clock():
@@ -270,6 +280,5 @@ async def get_clock():
 if __name__ == '__main__':
     # main loop and should continue forever unless an error is thrown
     loop = asyncio.new_event_loop()
-    # loop.create_task(run())
     loop.create_task(subscribe())
     loop.run_forever()
