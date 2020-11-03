@@ -11,8 +11,7 @@ from calendar import monthrange
 import concurrent.futures
 
 base_url = 'https://paper-api.alpaca.markets' # 'https://paper-api.alpaca.markets' - used for paper account
-api_key_id = 'PK9XU6G5CC77W5WL1AIS'
-api_secret = 'PIH84fvxhYh37k4Bxp1ieEOcyiCZnxkLYufW2FzV'
+
 #TODO need to work on shorting the market instead of just selling
 
 class Main:
@@ -239,18 +238,22 @@ def calc_faster(data_list):
 async def subscribe():
     while True: # making the loop run forever
         await run_await()
-        isOpen = api.get_clock().is_open
+        await get_clock
         global channels
-        while(isOpen == True): # making sure the market is still open
+        while(await get_clock == True): # making sure the market is still open
             await conn.subscribe(channels) # get data for the stock that we want
             if (data != []):
                 calc_faster(data)
-            isOpen = api.get_clock().is_open
+            await get_clock
             #print(await get_clock())
             await asyncio.sleep(10) # sleep otherwise is_open will timeout
             if(isOpen == False):
                 await conn.unsubscribe(channels)
                 print('Market Closed')
+
+async def get_clock():
+    isOpen = api.get_clock().is_open
+    return isOpen
 
 if __name__ == '__main__':
     # main loop and should continue forever unless an error is thrown
