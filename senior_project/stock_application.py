@@ -11,6 +11,8 @@ from calendar import monthrange
 import concurrent.futures
 
 base_url = 'https://paper-api.alpaca.markets' # 'https://paper-api.alpaca.markets' - used for paper account
+api_key_id = 'PK9XU6G5CC77W5WL1AIS'
+api_secret = 'PIH84fvxhYh37k4Bxp1ieEOcyiCZnxkLYufW2FzV'
 
 #TODO need to work on shorting the market instead of just selling
 
@@ -63,7 +65,7 @@ class Main:
 
     #grab data for each stock that is in the list
     async def grab_data(self):
-        end_of_month = open('end_of_month.txt', 'r').read()
+        end_of_month = open('C:\\Users\\matta\\Documents\\test\\senior-project\\senior_project\\end_of_month.txt', 'r').read()
         today = datetime.datetime.today()
         today = today.strftime('%Y-%m-%d')
 
@@ -197,14 +199,19 @@ async def awaitMarketOpen():
         timeToOpen = int((openingTime - currTime) / 60)
         print(str(timeToOpen) + ' minutes til market open.')
         # when there is a 5 minutes till open we want to grab our data
-        if(timeToOpen == 5):
-            global df_ticker_list
-            global ticker_list
-            df_ticker_list, ticker_list = await ema.grab_data()
-            global channels
-            channels = ['AM.' + symbol for symbol in ticker_list]
+        #if(timeToOpen == 0):
+            # global df_ticker_list
+            # global ticker_list
+            # df_ticker_list, ticker_list = await ema.grab_data()
+            # global channels
+            # channels = ['AM.' + symbol for symbol in ticker_list]
         time.sleep(60)
         isOpen = api.get_clock().is_open
+    global df_ticker_list
+    global ticker_list
+    df_ticker_list, ticker_list = await ema.grab_data()
+    global channels
+    channels = ['AM.' + symbol for symbol in ticker_list]
 
 # Wait for market to open
 async def run_await():
@@ -238,16 +245,16 @@ def calc_faster(data_list):
 async def subscribe():
     while True: # making the loop run forever
         await run_await()
-        await get_clock
+        await get_clock()
         global channels
-        while(await get_clock == True): # making sure the market is still open
+        while(await get_clock() == True): # making sure the market is still open
             await conn.subscribe(channels) # get data for the stock that we want
             if (data != []):
                 calc_faster(data)
-            await get_clock
+            await get_clock()
             #print(await get_clock())
             await asyncio.sleep(10) # sleep otherwise is_open will timeout
-            if(isOpen == False):
+            if(await get_clock() == False):
                 await conn.unsubscribe(channels)
                 print('Market Closed')
 
