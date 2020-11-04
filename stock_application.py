@@ -21,7 +21,7 @@ class Main:
         # initalize some variables
         self._api = api
         self.min_share_price = 1.00
-        self.max_share_price = 13.00
+        self.max_share_price = 20.00
         self.min_last_dv = 500000
         self.risk = 0.03
 
@@ -31,7 +31,7 @@ class Main:
         tickers = api.polygon.all_tickers()
         print('Success.')
         assets = api.list_assets()
-        symbols = [asset.symbol for asset in assets if asset.tradable]
+        symbols = [asset.symbol for asset in assets if asset.tradable and asset.shortable]
         ticker_list = [ticker for ticker in tickers if (
             ticker.ticker in symbols and
             ticker.lastTrade['p'] >= self.min_share_price and
