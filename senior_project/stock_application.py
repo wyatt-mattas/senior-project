@@ -65,7 +65,7 @@ class Main:
 
     #grab data for each stock that is in the list
     async def grab_data(self):
-        end_of_month = open('C:\\Users\\matta\\Documents\\test\\senior-project\\senior_project\\end_of_month.txt', 'r').read()
+        end_of_month = open('end_of_month.txt', 'r').read()
         today = datetime.datetime.today()
         today = today.strftime('%Y-%m-%d')
 
@@ -199,19 +199,19 @@ async def awaitMarketOpen():
         timeToOpen = int((openingTime - currTime) / 60)
         print(str(timeToOpen) + ' minutes til market open.')
         # when there is a 5 minutes till open we want to grab our data
-        #if(timeToOpen == 0):
-            # global df_ticker_list
-            # global ticker_list
-            # df_ticker_list, ticker_list = await ema.grab_data()
-            # global channels
-            # channels = ['AM.' + symbol for symbol in ticker_list]
+        if(timeToOpen == 5):
+            global df_ticker_list
+            global ticker_list
+            df_ticker_list, ticker_list = await ema.grab_data()
+            global channels
+            channels = ['AM.' + symbol for symbol in ticker_list]
         time.sleep(60)
         isOpen = api.get_clock().is_open
-    global df_ticker_list
-    global ticker_list
-    df_ticker_list, ticker_list = await ema.grab_data()
-    global channels
-    channels = ['AM.' + symbol for symbol in ticker_list]
+    # global df_ticker_list
+    # global ticker_list
+    # df_ticker_list, ticker_list = await ema.grab_data()
+    # global channels
+    # channels = ['AM.' + symbol for symbol in ticker_list]
 
 # Wait for market to open
 async def run_await():
@@ -237,7 +237,7 @@ def calc_everything(data_list):
 # using ThreadPoolExecutor run calc_everything using workers to increase speed of program
 def calc_faster(data_list):
     with concurrent.futures.ThreadPoolExecutor(
-                max_workers=150) as executor:
+                max_workers=10) as executor:
             {executor.submit(calc_everything,i): i for i in data_list}
     data_list.clear() # clear data list so there can be new data in an empty list
 
