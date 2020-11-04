@@ -23,7 +23,7 @@ class Main:
         self.min_share_price = 1.00
         self.max_share_price = 13.00
         self.min_last_dv = 500000
-        self.risk = 0.01
+        self.risk = 0.03
 
     # get a list of tickers that meet a certain criteria
     def get_tickers(self):
