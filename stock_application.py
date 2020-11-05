@@ -218,11 +218,6 @@ async def awaitMarketOpen():
             last_equity = float(api.get_account().last_equity)
             price_change = round(equity - last_equity, 2)
             client.messages.create(from_='+13343732933',to='+16207578055',body=f'Current Equity: ${equity} -- Price Change: ${str(price_change)}')
-        elif ct == '18:01':
-            equity = float(api.get_account().equity)
-            last_equity = float(api.get_account().last_equity)
-            price_change = round(equity - last_equity, 2)
-            client.messages.create(from_='+13343732933',to='+16207578055',body=f'Current Equity: ${equity} -- Price Change: ${str(price_change)}')
         time.sleep(60)
         isOpen = api.get_clock().is_open
 
