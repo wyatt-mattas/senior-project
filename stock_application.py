@@ -272,7 +272,6 @@ async def subscribe():
             await asyncio.sleep(10) # sleep otherwise is_open will timeout
             if await get_clock() == False:
                 await conn.unsubscribe(channels)
-                equity = api.get_account().equity
                 print('Market Closed')
 
 async def get_clock():
