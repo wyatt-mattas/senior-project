@@ -12,11 +12,11 @@ import concurrent.futures
 from twilio.rest import Client
 
 base_url = 'https://paper-api.alpaca.markets'
-api_key_id = 'PK9XU6G5CC77W5WL1AIS'
-api_secret = 'PIH84fvxhYh37k4Bxp1ieEOcyiCZnxkLYufW2FzV'
+api_key_id = open('C:\\Account IDs\\APIID.txt', 'r').read()
+api_secret = open('C:\\Account IDs\\APISecret.txt', 'r').read()
 
-account_sid = 'AC56d2de729849e2a64511dd0e71a953c6'
-auth_token = '8e33eccb2b143f86c50a9de193afc9c1'
+account_sid = open('C:\\Account IDs\\SID.txt', 'r').read()
+auth_token = open('C:\\Account IDs\\token.txt', 'r').read()
 
 #TODO need to work on shorting the market instead of just selling
 #TODO add the ability send sms add end of day
@@ -249,7 +249,7 @@ def calc_everything(data_list):
 # using ThreadPoolExecutor run calc_everything using workers to increase speed of program
 def calc_faster(data_list):
     with concurrent.futures.ThreadPoolExecutor(
-                max_workers=20) as executor:
+                max_workers=10) as executor:
             {executor.submit(calc_everything,i): i for i in data_list}
     data_list.clear() # clear data list so there can be new data in an empty list
 
