@@ -1,6 +1,6 @@
 import csv
 import talib._ta_lib as ta
-from datetime import timedelta
+from datetime import timedelta, datetime
 import datetime
 import alpaca_trade_api as tradeapi
 import requests
@@ -9,14 +9,19 @@ import time
 import asyncio
 from calendar import monthrange
 import concurrent.futures
+from twilio.rest import Client
 
-base_url = 'https://paper-api.alpaca.markets' # 'https://paper-api.alpaca.markets' - used for paper account
+base_url = 'https://paper-api.alpaca.markets'
 api_key_id = 'PK9XU6G5CC77W5WL1AIS'
 api_secret = 'PIH84fvxhYh37k4Bxp1ieEOcyiCZnxkLYufW2FzV'
 
-#TODO need to work on shorting the market instead of just selling
+account_sid = 'AC56d2de729849e2a64511dd0e71a953c6'
+auth_token = '8e33eccb2b143f86c50a9de193afc9c1'
 
-class Main:
+#TODO need to work on shorting the market instead of just selling
+#TODO add the ability send sms add end of day
+
+class Calculations:
     def __init__(self, api):
         # initalize some variables
         self._api = api
@@ -69,7 +74,7 @@ class Main:
         today = datetime.datetime.today()
         today = today.strftime('%Y-%m-%d')
 
-        if(today == end_of_month): # grab new list of tickers for the month, might want to change to every two weeks
+        if today == end_of_month: # grab new list of tickers for the month, might want to change to every two weeks
             self.get_new_date()
             ticker_list = self.get_tickers()
             with open('ticker_list.csv', 'w') as myfile:
@@ -78,8 +83,8 @@ class Main:
             positions = self._api.list_positions()
             if positions != [] :
                 for position in positions:
-                    if(position.side == 'long'):
-                        if(position.symbol not in ticker_list): # want to sell off tickers that have not close yet 
+                    if position.side == 'long':
+                        if position.symbol not in ticker_list: # want to sell off tickers that have not close yet
                             qty = abs(int(float(position.qty)))
                             self._api.submit_order(position.symbol, qty, 'sell', 'market', 'day') # TODO might want to change this
         # read the ticker list from text file
@@ -114,14 +119,15 @@ class Main:
     def buy_sell_calc(self, dataframe, ticker):
         # make sure we get the actual symbol
         ticker_symbol = ticker['symbol']
+        # check if we can sell
         if (dataframe['ema5'][dataframe.index[-1]] > dataframe['ema15'][dataframe.index[-1]] and dataframe['ema5'][dataframe.index[-1]] > dataframe['ema40'][dataframe.index[-1]] and dataframe['ema15'][dataframe.index[-1]] > dataframe['ema40'][dataframe.index[-1]]):
-            if(dataframe['ema5'][dataframe.index[-2]] > dataframe['ema15'][dataframe.index[-2]] and dataframe['ema5'][dataframe.index[-2]] > dataframe['ema40'][dataframe.index[-2]] and dataframe['ema15'][dataframe.index[-2]] > dataframe['ema40'][dataframe.index[-2]]): # making sure the it is tending to move upwards
+            if (dataframe['ema5'][dataframe.index[-2]] > dataframe['ema15'][dataframe.index[-2]] and dataframe['ema5'][dataframe.index[-2]] > dataframe['ema40'][dataframe.index[-2]] and dataframe['ema15'][dataframe.index[-2]] > dataframe['ema40'][dataframe.index[-2]]): # making sure the it is tending to move upwards
                 if (((dataframe['ema5'][dataframe.index[-1]]-dataframe['ema15'][dataframe.index[-1]])/dataframe['ema15'][dataframe.index[-1]]*100) > .5 and ((dataframe['ema5'][dataframe.index[-1]]-dataframe['ema40'][dataframe.index[-1]])/dataframe['ema40'][dataframe.index[-1]]*100) > 2):
                     if self.get_positions_sell(ticker_symbol) is not None:
                         qty, orderside = self.get_positions_sell(ticker_symbol)
                         if orderside == 'long':
                             self.submitOrder(qty,ticker_symbol,'sell')
-
+        # check if we can buy
         if (dataframe['ema5'][dataframe.index[-1]] < dataframe['ema15'][dataframe.index[-1]] and dataframe['ema5'][dataframe.index[-1]] < dataframe['ema40'][dataframe.index[-1]] and dataframe['ema15'][dataframe.index[-1]] < dataframe['ema40'][dataframe.index[-1]]):
             if (dataframe['ema5'][dataframe.index[-2]] < dataframe['ema15'][dataframe.index[-2]] and dataframe['ema5'][dataframe.index[-2]] < dataframe['ema40'][dataframe.index[-2]] and dataframe['ema15'][dataframe.index[-2]] < dataframe['ema40'][dataframe.index[-2]]):
                 if (dataframe['ema5'][dataframe.index[-3]] < dataframe['ema15'][dataframe.index[-3]] and dataframe['ema5'][dataframe.index[-3]] < dataframe['ema40'][dataframe.index[-3]] and dataframe['ema15'][dataframe.index[-3]] < dataframe['ema40'][dataframe.index[-3]]):
@@ -132,10 +138,10 @@ class Main:
 
     # function for submitting the order
     def submitOrder(self, qty, stock, side):
-        if(qty > 0):
+        if qty > 0:
             try:
                 self._api.submit_order(stock, qty, side, 'market', 'day')
-                print('Market order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | completed.')
+                print('Market order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | completed.') # TODO add time stamp
             except:
                 print('Order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | did not go through.')
         else:
@@ -143,20 +149,20 @@ class Main:
 
     # calculate the number of stocks that we want to buy
     def calc_num_of_stocks(self, stock):
-        portfolio_value = float(api.get_account().buying_power) # TODO might make this equity
+        portfolio_value = float(self._api.get_account().buying_power) # TODO might make this buying_power
         rough_number = (portfolio_value * self.risk) / stock['low']
         quantity = round(rough_number) # make sure it is an even number
-        if (quantity < 1):
-            quantity = 1
+        if quantity < 1:
+            quantity = 1 # want to buy at least one stock
         return quantity
 
     # get stock to sell based on if there is already a position
     def get_positions_sell(self, ticker):
         positions = self._api.list_positions()
-        if (positions != []):
+        if positions != []:
             for position in positions:
-                if (position.symbol == ticker):
-                    if(position.side == 'long'):
+                if position.symbol == ticker:
+                    if position.side == 'long':
                         orderSide = 'long'
                         qty = abs(int(float(position.qty)))
                         return qty, orderSide
@@ -165,25 +171,26 @@ class Main:
     def get_positions_buy(self, ticker):
         positions = self._api.list_positions()
         can_buy = False
-        if (positions == []):
+        if positions == []:
             can_buy = True
             return can_buy
-        elif (positions != []):
+        elif positions != []:
             for position in positions:
-                if (position.symbol != ticker):
+                if position.symbol != ticker:
                     can_buy = True
-                elif(position.symbol == ticker):
+                elif position.symbol == ticker:
                     can_buy = False
                     break
             return can_buy
-
 
 # create our connection to the api and streamconn for our up to date data
 api = tradeapi.REST(base_url=base_url,key_id=api_key_id,secret_key=api_secret,api_version='v2')
 conn = StreamConn(base_url=base_url,key_id=api_key_id,secret_key=api_secret)
 
+client = Client(account_sid, auth_token)
+
 # global variables
-ema = Main(api)
+ema = Calculations(api)
 data = []
 df_ticker_list = []
 ticker_list = []
@@ -192,26 +199,31 @@ channels = []
 # wait for the market to open
 async def awaitMarketOpen():
     isOpen = api.get_clock().is_open
-    while(not isOpen):
+    global df_ticker_list
+    global ticker_list
+    global channels
+    while not isOpen:
         clock = api.get_clock()
         openingTime = clock.next_open.replace(tzinfo=datetime.timezone.utc).timestamp()
         currTime = clock.timestamp.replace(tzinfo=datetime.timezone.utc).timestamp()
         timeToOpen = int((openingTime - currTime) / 60)
         print(str(timeToOpen) + ' minutes til market open.')
         # when there is a 5 minutes till open we want to grab our data
-        if(timeToOpen == 5):
-            global df_ticker_list
-            global ticker_list
+        if timeToOpen == 5:
             df_ticker_list, ticker_list = await ema.grab_data()
-            global channels
             channels = ['AM.' + symbol for symbol in ticker_list]
+        ct = datetime.datetime.now().strftime('%H:%M')
+        if ct == '18:00':
+            equity = float(api.get_account().equity)
+            last_equity = float(api.get_account().last_equity)
+            price_change = round(equity - last_equity, 2)
+            client.messages.create(from_='+13343732933',to='+16207578055',body=f'Current Equity: ${equity} -- Price Change: ${str(price_change)}')
         time.sleep(60)
         isOpen = api.get_clock().is_open
-    # global df_ticker_list
-    # global ticker_list
-    # df_ticker_list, ticker_list = await ema.grab_data()
-    # global channels
-    # channels = ['AM.' + symbol for symbol in ticker_list]
+
+    if df_ticker_list == [] and ticker_list == [] and channels == []:
+        df_ticker_list, ticker_list = await ema.grab_data()
+        channels = ['AM.' + symbol for symbol in ticker_list]
 
 # Wait for market to open
 async def run_await():
@@ -237,7 +249,7 @@ def calc_everything(data_list):
 # using ThreadPoolExecutor run calc_everything using workers to increase speed of program
 def calc_faster(data_list):
     with concurrent.futures.ThreadPoolExecutor(
-                max_workers=10) as executor:
+                max_workers=20) as executor:
             {executor.submit(calc_everything,i): i for i in data_list}
     data_list.clear() # clear data list so there can be new data in an empty list
 
@@ -245,17 +257,17 @@ def calc_faster(data_list):
 async def subscribe():
     while True: # making the loop run forever
         await run_await()
-        await get_clock()
-        global channels
-        while(await get_clock() == True): # making sure the market is still open
+        await get_clock() # get clock after market opens
+        #global channels
+        while await get_clock() == True: # making sure the market is still open
             await conn.subscribe(channels) # get data for the stock that we want
-            if (data != []):
+            if data != []:
                 calc_faster(data)
             await get_clock()
-            #print(await get_clock())
             await asyncio.sleep(10) # sleep otherwise is_open will timeout
-            if(await get_clock() == False):
+            if await get_clock() == False:
                 await conn.unsubscribe(channels)
+                equity = api.get_account().equity
                 print('Market Closed')
 
 async def get_clock():
