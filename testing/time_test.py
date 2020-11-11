@@ -16,15 +16,11 @@ while True:
         break
     time.sleep(5)'''
 
-base_url = 'https://paper-api.alpaca.markets' # 'https://paper-api.alpaca.markets' - used for paper account
-api_key_id = 'PKK2HPWQFY9I25KIDVP9' # AKJUVZ2YL4C4J9XRVD2P -- paper trading(PKK2HPWQFY9I25KIDVP9)
-api_secret = 'IKSKvUlQp5iv9fGMkVlJ27pFiKqE0symg2KseZpQ' # Fms0oy3tdNp7K9E8oF13nFScWFuiECzXiShA2PTF -- paper trading(IKSKvUlQp5iv9fGMkVlJ27pFiKqE0symg2KseZpQ)
+base_url = 'https://paper-api.alpaca.markets'
+api_key_id = open('C:\\Account IDs\\AlpacaAPIIDNewOrig.txt', 'r').read()
+api_secret = open('C:\\Account IDs\\AlpacaAPINewSecretOrig.txt', 'r').read()
 
-api = tradeapi.REST(
-    base_url=base_url,
-    key_id=api_key_id,
-    secret_key=api_secret,
-    api_version='v2')
+api = tradeapi.REST(base_url=base_url,key_id=api_key_id,secret_key=api_secret,api_version='v2')
 account = api.get_account()
 
 symbols='NCZ'
@@ -34,21 +30,26 @@ max_share_price = 13.0
 # Minimum previous-day dollar volume for a stock we might consider
 min_last_dv = 500000
 
-# def get_tickers(): # TODO need to make this the universe -- make this save to csv -- or could use api.add_watchlist()
-#     print('Getting current ticker data...')
-#     tickers = api.polygon.all_tickers()
-#     print('Success.')
-#     assets = api.list_assets()
-#     symbols = [asset.symbol for asset in assets if asset.tradable]
-#     return [ticker for ticker in tickers if (
-#         ticker.ticker in symbols and
-#         ticker.lastTrade['p'] >= min_share_price and
-#         ticker.lastTrade['p'] <= max_share_price and
-#         ticker.prevDay['v'] * ticker.lastTrade['p'] > min_last_dv and
-#         ticker.todaysChangePerc >= 3.5
-#     )]
+def get_tickers():
+    print('Getting current ticker data...')
+    tickers = api.polygon.all_tickers()
+    print('Success.')
+    assets = api.list_assets()
+    symbols = [asset.symbol for asset in assets if asset.tradable and asset.shortable]
+    ticker_list = [ticker for ticker in tickers if (
+        ticker.ticker in symbols and
+        ticker.lastTrade['p'] >= min_share_price and
+        ticker.lastTrade['p'] <= max_share_price and
+        ticker.prevDay['v'] * ticker.lastTrade['p'] > min_last_dv and
+        ticker.todaysChangePerc >= 3.5
+    )]
+    ticker_list = [ticker.ticker for ticker in ticker_list]
+    ticker_list = sorted(ticker_list, key=str.lower)
+    return ticker_list
 
-# tickers = get_tickers()
+tickers = get_tickers()
+print(tickers)
+print('ok')
 # ticker_list = [ticker.ticker for ticker in tickers]
 # ticker_list = sorted(ticker_list, key=str.lower)
 # print(ticker_list)
