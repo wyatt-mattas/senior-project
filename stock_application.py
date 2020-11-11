@@ -1,6 +1,6 @@
 import csv
 import talib._ta_lib as ta
-from datetime import timedelta, datetime
+from datetime import timedelta
 import datetime
 import alpaca_trade_api as tradeapi
 import requests
@@ -10,16 +10,15 @@ import asyncio
 from calendar import monthrange
 import concurrent.futures
 from twilio.rest import Client
-
+# VERSION ORIGINAL
 base_url = 'https://paper-api.alpaca.markets'
-api_key_id = open('C:\\Account IDs\\APIID.txt', 'r').read()
-api_secret = open('C:\\Account IDs\\APISecret.txt', 'r').read()
+api_key_id = open('C:\\Account IDs\\AlpacaAPIIDNewOrig.txt', 'r').read()
+api_secret = open('C:\\Account IDs\\AlpacaAPINewSecretOrig.txt', 'r').read()
 
 account_sid = open('C:\\Account IDs\\SID.txt', 'r').read()
 auth_token = open('C:\\Account IDs\\token.txt', 'r').read()
 
 #TODO need to work on shorting the market instead of just selling
-#TODO add the ability send sms add end of day
 
 class Calculations:
     def __init__(self, api):
@@ -64,31 +63,29 @@ class Calculations:
         date = f'{year}-{month}-{month_last_day}'
         calendar = self._api.get_calendar(start=date, end=date)[0]
         closest_to_end_of_month = calendar.date.strftime('%Y-%m-%d')
-        f = open("end_of_month.txt", "w")
+        f = open("C:\\Users\\matta\\Documents\\Stock_Application\\senior-project\\end_of_month.txt", "w")
         f.write(closest_to_end_of_month) # overwrite file to new date
         f.close()
 
     #grab data for each stock that is in the list
     async def grab_data(self):
-        end_of_month = open('end_of_month.txt', 'r').read()
+        end_of_month = open('C:\\Users\\matta\\Documents\\Stock_Application\\senior-project\\end_of_month.txt', 'r').read()
         today = datetime.datetime.today()
         today = today.strftime('%Y-%m-%d')
 
         if today == end_of_month: # grab new list of tickers for the month, might want to change to every two weeks
             self.get_new_date()
             ticker_list = self.get_tickers()
-            with open('ticker_list.csv', 'w') as myfile:
+            with open('C:\\Users\\matta\\Documents\\Stock_Application\\senior-project\\ticker_list.csv', 'w') as myfile:
                 wr = csv.writer(myfile)
                 wr.writerow(ticker_list) # overwrite csv file with list of new tickers
             positions = self._api.list_positions()
             if positions != [] :
                 for position in positions:
-                    if position.side == 'long':
-                        if position.symbol not in ticker_list: # want to sell off tickers that have not close yet
-                            qty = abs(int(float(position.qty)))
-                            self._api.submit_order(position.symbol, qty, 'sell', 'market', 'day') # TODO might want to change this
+                    if position.symbol not in ticker_list: # want to sell off tickers that have not close yet
+                        self._api.close_position(position.symbol)
         # read the ticker list from text file
-        with open('ticker_list.csv', newline='') as f:
+        with open('C:\\Users\\matta\\Documents\\Stock_Application\\senior-project\\ticker_list.csv', newline='') as f:
             reader = csv.reader(f)
             ticker_list = list(reader)
             ticker_list = ticker_list[0]
@@ -132,6 +129,7 @@ class Calculations:
             if (dataframe['ema5'][dataframe.index[-2]] < dataframe['ema15'][dataframe.index[-2]] and dataframe['ema5'][dataframe.index[-2]] < dataframe['ema40'][dataframe.index[-2]] and dataframe['ema15'][dataframe.index[-2]] < dataframe['ema40'][dataframe.index[-2]]):
                 if (dataframe['ema5'][dataframe.index[-3]] < dataframe['ema15'][dataframe.index[-3]] and dataframe['ema5'][dataframe.index[-3]] < dataframe['ema40'][dataframe.index[-3]] and dataframe['ema15'][dataframe.index[-3]] < dataframe['ema40'][dataframe.index[-3]]):
                     can_buy = self.get_positions_buy(ticker_symbol)
+                    #print(f'Can buy: {can_buy}')
                     if can_buy == True:
                         quantity = self.calc_num_of_stocks(ticker)
                         self.submitOrder(quantity,ticker_symbol,'buy')
@@ -141,7 +139,7 @@ class Calculations:
         if qty > 0:
             try:
                 self._api.submit_order(stock, qty, side, 'market', 'day')
-                print('Market order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | completed.') # TODO add time stamp
+                print('Market order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | completed.') # TODO might need to take out limit price if it doesn't work as intended
             except:
                 print('Order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | did not go through.')
         else:
@@ -149,7 +147,7 @@ class Calculations:
 
     # calculate the number of stocks that we want to buy
     def calc_num_of_stocks(self, stock):
-        portfolio_value = float(self._api.get_account().buying_power) # TODO might make this buying_power
+        portfolio_value = float(self._api.get_account().buying_power) # TODO might make this equity or actual cash, might be screwing up buying power after market closes with negative cash and open positions
         rough_number = (portfolio_value * self.risk) / stock['low']
         quantity = round(rough_number) # make sure it is an even number
         if quantity < 1:
@@ -188,7 +186,6 @@ api = tradeapi.REST(base_url=base_url,key_id=api_key_id,secret_key=api_secret,ap
 conn = StreamConn(base_url=base_url,key_id=api_key_id,secret_key=api_secret)
 
 client = Client(account_sid, auth_token)
-
 # global variables
 ema = Calculations(api)
 data = []
@@ -217,7 +214,7 @@ async def awaitMarketOpen():
             equity = float(api.get_account().equity)
             last_equity = float(api.get_account().last_equity)
             price_change = round(equity - last_equity, 2)
-            client.messages.create(from_='+13343732933',to='+16207578055',body=f'Current Equity: ${equity} -- Price Change: ${str(price_change)}')
+            client.messages.create(from_='+13343732933',to='+16207578055',body=f'Current Equity: ${equity} \n Price Change: ${str(price_change)}')
         time.sleep(60)
         isOpen = api.get_clock().is_open
 
@@ -251,6 +248,7 @@ def calc_faster(data_list):
     with concurrent.futures.ThreadPoolExecutor(
                 max_workers=10) as executor:
             {executor.submit(calc_everything,i): i for i in data_list}
+    #print('Got new data')
     data_list.clear() # clear data list so there can be new data in an empty list
 
 # main loop of getting minute data
