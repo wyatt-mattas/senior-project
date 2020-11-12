@@ -17,11 +17,20 @@ while True:
     time.sleep(5)'''
 
 base_url = 'https://paper-api.alpaca.markets'
-api_key_id = open('C:\\Account IDs\\AlpacaAPIIDNewOrig.txt', 'r').read()
-api_secret = open('C:\\Account IDs\\AlpacaAPINewSecretOrig.txt', 'r').read()
+api_key_id = open('C:\\Account IDs\\AlpacaAPIIDOrig.txt', 'r').read()
+api_secret = open('C:\\Account IDs\\AlpacaAPISecretOrig.txt', 'r').read()
 
 api = tradeapi.REST(base_url=base_url,key_id=api_key_id,secret_key=api_secret,api_version='v2')
 account = api.get_account()
+
+ct = datetime.now().strftime('%H:%M')
+print(ct)
+while ct >= '08:00' and ct <= '17:35':
+    print('hello')
+    time.sleep(60)
+    ct = datetime.now().strftime('%H:%M')
+    print(ct)
+print('ok')
 
 symbols='NCZ'
 
