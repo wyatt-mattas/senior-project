@@ -32,7 +32,7 @@ class Calculations:
     # get a list of tickers that meet a certain criteria
     def get_tickers(self):
         print('Getting current ticker data...')
-        tickers = self._api.polygon.all_tickers()
+        tickers = self._api.polygon.all_tickers() # TODO make sure list is not empty
         print('Success.')
         assets = self._api.list_assets()
         symbols = [asset.symbol for asset in assets if asset.tradable]
@@ -56,17 +56,20 @@ class Calculations:
 
     #grab data for each stock that is in the list
     def grab_data(self):
-        if date.today().weekday() == 0:
-            ticker_list = self.get_tickers()
+        #if date.today().weekday() == 0:
+        ticker_list = self.get_tickers()
+        if ticker_list != []:
             with open('ticker_list_liquid.csv', 'w') as myfile:
                 wr = csv.writer(myfile)
                 wr.writerow(ticker_list) # overwrite csv file with list of new tickers
-            positions = self._api.list_positions()
+
+        positions = self._api.list_positions()
             #TODO might not need the position check since closing positions should be done already
-            if positions != [] :
-                for position in positions:
-                    if position.symbol not in ticker_list: # want to sell off tickers that have not close yet
-                        self._api.close_position(position.symbol)
+        if positions != [] :
+            for position in positions:
+                if position.symbol not in ticker_list: # want to sell off tickers that have not close yet
+                    self._api.close_position(position.symbol)
+
         # read the ticker list from text file
         with open('ticker_list_liquid.csv', newline='') as f:
             reader = csv.reader(f)
@@ -87,6 +90,8 @@ class Calculations:
             df_list[f'{ticker}'] = self._api.get_barset(symbols=ticker, timeframe='1Min', start=prev_date,end=end_date, limit=50).df
             df_list[f'{ticker}'].columns = df_list[f'{ticker}'].columns.droplevel()
             df_list[f'{ticker}'] = self.calc_ema(df_list[f'{ticker}'])
+            if df_list[f'{ticker}'].empty == True: # check if list is empty
+                del df_list[f'{ticker}']
             count += 1
             if count%200 == 0:
                 time.sleep(61)
@@ -119,15 +124,13 @@ class Calculations:
                     can_buy = self.get_positions_buy(ticker_symbol)
                     if can_buy == True:
                         quantity = self.calc_num_of_stocks(ticker)
-                        stop = str(round(dataframe['close'][dataframe.index[-1]]*.93,2))
-                        stop_loss = {"stop_price": stop, "limit_price": stop}
-                        self.submitOrder_buy(quantity,ticker_symbol,'buy',stop_loss)
+                        self.submitOrder_buy(quantity,ticker_symbol,'buy')
 
     # function for submitting the buy order
-    def submitOrder_buy(self, qty, stock, side, stop):
+    def submitOrder_buy(self, qty, stock, side):
         if qty > 0:
             try:
-                self._api.submit_order(stock, qty, side, 'market', 'day', stop_loss=stop)
+                self._api.submit_order(stock, qty, side, 'market', 'day')
                 print('Market order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | completed.') # TODO might need to take out limit price if it doesn't work as intended
             except:
                 print('Order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | did not go through.')
@@ -217,8 +220,6 @@ async def awaitMarketOpen():
             last_equity = float(api.get_account().last_equity)
             price_change = round(equity - last_equity, 2)
             client.messages.create(from_='+13343732933',to='+16207578055',body=f'Current Equity: ${equity}\nPrice Change: ${str(price_change)}')
-            if date.today().weekday() == 4:
-                api.close_all_positions()
         time.sleep(60)
         isOpen = api.get_clock().is_open
 
