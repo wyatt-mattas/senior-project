@@ -19,7 +19,6 @@ account_sid = open('C:\\Account IDs\\SID.txt', 'r').read()
 auth_token = open('C:\\Account IDs\\token.txt', 'r').read()
 
 #TODO need to work on shorting the market instead of just selling
-
 class Calculations:
     def __init__(self, api):
         # initalize some variables
@@ -54,21 +53,17 @@ class Calculations:
             adate -= timedelta(days=1)
         return adate
 
-    #grab data for each stock that is in the list
-    def grab_data(self):
-        #if date.today().weekday() == 0:
-        ticker_list = self.get_tickers()
-        if ticker_list != []:
-            with open('ticker_list_liquid.csv', 'w') as myfile:
-                wr = csv.writer(myfile)
-                wr.writerow(ticker_list) # overwrite csv file with list of new tickers
+    # grab data for each stock that is in the list
+    async def grab_data(self):
+        if date.today().weekday() == 0:
+            ticker_list = self.get_tickers()
+            if ticker_list != []:
+                with open('ticker_list_liquid.csv', 'w') as myfile:
+                    wr = csv.writer(myfile)
+                    wr.writerow(ticker_list) # overwrite csv file with list of new tickers
 
         positions = self._api.list_positions()
             #TODO might not need the position check since closing positions should be done already
-        if positions != [] :
-            for position in positions:
-                if position.symbol not in ticker_list: # want to sell off tickers that have not close yet
-                    self._api.close_position(position.symbol)
 
         # read the ticker list from text file
         with open('ticker_list_liquid.csv', newline='') as f:
@@ -76,6 +71,14 @@ class Calculations:
             ticker_list = list(reader)
             ticker_list = ticker_list[0]
             print(ticker_list)
+
+        if positions != [] :
+            for position in positions:
+                if position.symbol not in ticker_list: # want to sell off tickers that have not close yet
+                    try:
+                        self._api.close_position(position.symbol, position.qty)
+                    except:
+                        print('Failed to liquidate')
 
         # get data from pervious market day for tickers in list
         prev_date = self.prev_weekday(datetime.datetime.today())
@@ -116,6 +119,7 @@ class Calculations:
                     if self.get_positions_sell(ticker_symbol) is not None:
                         qty, orderside = self.get_positions_sell(ticker_symbol)
                         if orderside == 'long':
+                            #limit_price = round(dataframe['close'][dataframe.index[-1]],2) #TODO either take out limit for sell or make it from low column not close
                             self.submitOrder_sell(qty,ticker_symbol,'sell')
         # check if we can buy
         if (dataframe['ema5'][dataframe.index[-1]] < dataframe['ema15'][dataframe.index[-1]] and dataframe['ema5'][dataframe.index[-1]] < dataframe['ema40'][dataframe.index[-1]] and dataframe['ema15'][dataframe.index[-1]] < dataframe['ema40'][dataframe.index[-1]]):
@@ -123,35 +127,37 @@ class Calculations:
                 if (dataframe['ema5'][dataframe.index[-3]] < dataframe['ema15'][dataframe.index[-3]] and dataframe['ema5'][dataframe.index[-3]] < dataframe['ema40'][dataframe.index[-3]] and dataframe['ema15'][dataframe.index[-3]] < dataframe['ema40'][dataframe.index[-3]]):
                     can_buy = self.get_positions_buy(ticker_symbol)
                     if can_buy == True:
-                        quantity = self.calc_num_of_stocks(ticker)
-                        self.submitOrder_buy(quantity,ticker_symbol,'buy')
+                        quantity = self.calc_num_of_stocks(dataframe)
+                        limit = round(dataframe['close'][dataframe.index[-1]],2)
+                        stop = str(round(dataframe['close'][dataframe.index[-1]]*.93,2))
+                        stop_loss = {"stop_price": stop, "limit_price": stop}
+                        self.submitOrder_buy(quantity,ticker_symbol,'buy',limit,stop_loss)
 
-    # function for submitting the buy order
-    def submitOrder_buy(self, qty, stock, side):
+    # function for submitting buy order
+    def submitOrder_buy(self, qty, stock, side, limit, stop):
         if qty > 0:
             try:
-                self._api.submit_order(stock, qty, side, 'market', 'day')
-                print('Market order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | completed.') # TODO might need to take out limit price if it doesn't work as intended
+                self._api.submit_order(stock, qty, side, 'market', 'day', stop_loss=stop)
+                print('Market order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | completed.')
             except:
                 print('Order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | did not go through.')
         else:
             print('Quantity is 0, order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | not completed.')
-
-    # function for submitting the sell order
+    # function for submitting sell order
     def submitOrder_sell(self, qty, stock, side):
         if qty > 0:
             try:
                 self._api.submit_order(stock, qty, side, 'market', 'day')
-                print('Market order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | completed.') # TODO might need to take out limit price if it doesn't work as intended
+                print('Market order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | completed.')
             except:
                 print('Order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | did not go through.')
         else:
             print('Quantity is 0, order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | not completed.')
 
     # calculate the number of stocks that we want to buy
-    def calc_num_of_stocks(self, stock):
+    def calc_num_of_stocks(self, dataframe):
         portfolio_value = float(self._api.get_account().buying_power) # TODO might make this equity or actual cash, might be screwing up buying power after market closes with negative cash and open positions
-        rough_number = (portfolio_value * self.risk) / stock['low'][stock.index[-1]]
+        rough_number = (portfolio_value * self.risk) / dataframe['low'][dataframe.index[-1]]
         quantity = round(rough_number) # make sure it is an even number
         if quantity < 1:
             quantity = 1 # want to buy at least one stock
@@ -203,29 +209,35 @@ async def awaitMarketOpen():
     global ticker_list
     global channels
     while not isOpen:
-        clock = api.get_clock()
-        openingTime = clock.next_open.replace(tzinfo=datetime.timezone.utc).timestamp()
-        currTime = clock.timestamp.replace(tzinfo=datetime.timezone.utc).timestamp()
-        timeToOpen = int((openingTime - currTime) / 60)
-        print(str(timeToOpen) + ' minutes til market open.')
-        # when there is a 5 minutes till open we want to grab our data
-        if timeToOpen == 5:
+        try:
+            clock = api.get_clock()
+            openingTime = clock.next_open.replace(tzinfo=datetime.timezone.utc).timestamp()
+            currTime = clock.timestamp.replace(tzinfo=datetime.timezone.utc).timestamp()
+            timeToOpen = int((openingTime - currTime) / 60)
+            print(str(timeToOpen) + ' minutes til market open.')
+            # when there is a 5 minutes till open we want to grab our data
+            if timeToOpen == 5:
+                df_ticker_list, ticker_list = await ema.grab_data()
+                channels = ['AM.' + symbol for symbol in ticker_list]
+            ct = datetime.datetime.now().strftime('%H:%M')
+            if ct == '18:01':
+                #api.close_all_positions() #TODO might error out, might need to do at 2:59
+                time.sleep(2)
+                equity = float(api.get_account().equity)
+                last_equity = float(api.get_account().last_equity)
+                price_change = round(equity - last_equity, 2)
+                client.messages.create(from_='+13343732933',to='+16207578055',body=f'Current Equity: ${equity}\nPrice Change: ${str(price_change)}')
+            time.sleep(60)
+            isOpen = api.get_clock().is_open
+        except:
+            print('Await Market Open Error')
+
+    try:
+        if df_ticker_list == [] and ticker_list == [] and channels == []:
             df_ticker_list, ticker_list = await ema.grab_data()
             channels = ['AM.' + symbol for symbol in ticker_list]
-        ct = datetime.datetime.now().strftime('%H:%M')
-        if ct == '18:01':
-            #api.close_all_positions() #TODO might error out, might need to do at 2:59
-            time.sleep(2)
-            equity = float(api.get_account().equity)
-            last_equity = float(api.get_account().last_equity)
-            price_change = round(equity - last_equity, 2)
-            client.messages.create(from_='+13343732933',to='+16207578055',body=f'Current Equity: ${equity}\nPrice Change: ${str(price_change)}')
-        time.sleep(60)
-        isOpen = api.get_clock().is_open
-
-    if df_ticker_list == [] and ticker_list == [] and channels == []:
-        df_ticker_list, ticker_list = await ema.grab_data()
-        channels = ['AM.' + symbol for symbol in ticker_list]
+    except:
+        print('Grab data Error')
 
 # Wait for market to open
 async def run_await():
