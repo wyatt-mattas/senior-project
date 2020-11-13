@@ -11,10 +11,11 @@ from calendar import monthrange
 import concurrent.futures
 from twilio.rest import Client
 # VERSION LIQUID
+# ALPACA API KEYS
 base_url = 'https://paper-api.alpaca.markets'
 api_key_id = open('C:\\Account IDs\\AlpacaAPIIDOrig.txt', 'r').read()
 api_secret = open('C:\\Account IDs\\AlpacaAPISecretOrig.txt', 'r').read()
-
+# KEYS FOR TWILIO
 account_sid = open('C:\\Account IDs\\SID.txt', 'r').read()
 auth_token = open('C:\\Account IDs\\token.txt', 'r').read()
 
@@ -55,14 +56,14 @@ class Calculations:
 
     # grab data for each stock that is in the list
     async def grab_data(self):
-        if date.today().weekday() == 0:
-            ticker_list = self.get_tickers()
-            if ticker_list != []:
-                with open('ticker_list_liquid.csv', 'w') as myfile:
-                    wr = csv.writer(myfile)
-                    wr.writerow(ticker_list) # overwrite csv file with list of new tickers
+        #if date.today().weekday() == 0:
+        ticker_list = self.get_tickers()
+        if ticker_list != []:
+            with open('ticker_list_liquid.csv', 'w') as myfile:
+                wr = csv.writer(myfile)
+                wr.writerow(ticker_list) # overwrite csv file with list of new tickers
 
-        positions = self._api.list_positions()
+        #positions = self._api.list_positions()
             #TODO might not need the position check since closing positions should be done already
 
         # read the ticker list from text file
@@ -71,14 +72,6 @@ class Calculations:
             ticker_list = list(reader)
             ticker_list = ticker_list[0]
             print(ticker_list)
-
-        if positions != [] :
-            for position in positions:
-                if position.symbol not in ticker_list: # want to sell off tickers that have not close yet
-                    try:
-                        self._api.close_position(position.symbol, position.qty)
-                    except:
-                        print('Failed to liquidate')
 
         # get data from pervious market day for tickers in list
         prev_date = self.prev_weekday(datetime.datetime.today())
@@ -128,16 +121,16 @@ class Calculations:
                     can_buy = self.get_positions_buy(ticker_symbol)
                     if can_buy == True:
                         quantity = self.calc_num_of_stocks(dataframe)
-                        limit = round(dataframe['close'][dataframe.index[-1]],2)
+                        #limit = round(dataframe['close'][dataframe.index[-1]],2)
                         stop = str(round(dataframe['close'][dataframe.index[-1]]*.93,2))
                         stop_loss = {"stop_price": stop, "limit_price": stop}
-                        self.submitOrder_buy(quantity,ticker_symbol,'buy',limit,stop_loss)
+                        self.submitOrder_buy(quantity,ticker_symbol,'buy',stop_loss)
 
     # function for submitting buy order
-    def submitOrder_buy(self, qty, stock, side, limit, stop):
+    def submitOrder_buy(self, qty, stock, side, stop):
         if qty > 0:
             try:
-                self._api.submit_order(stock, qty, side, 'market', 'day', stop_loss=stop)
+                self._api.submit_order(stock, qty, side, 'market', 'day', stop_loss=stop) # TODO might need to get of limit price
                 print('Market order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | completed.')
             except:
                 print('Order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | did not go through.')
@@ -149,8 +142,9 @@ class Calculations:
             try:
                 self._api.submit_order(stock, qty, side, 'market', 'day')
                 print('Market order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | completed.')
-            except:
+            except Exception as e:
                 print('Order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | did not go through.')
+                print(f'Error: {str(e)}')
         else:
             print('Quantity is 0, order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | not completed.')
 
@@ -238,6 +232,16 @@ async def awaitMarketOpen():
             channels = ['AM.' + symbol for symbol in ticker_list]
     except:
         print('Grab data Error')
+
+    positions = api.list_positions() # grab open positions
+    if positions != [] :
+        for position in positions:
+            if position.symbol not in ticker_list: # want to sell off tickers that have not close yet
+                try:
+                    api.close_position(position.symbol)
+                    print(f'Liquidated: {position.symbol}')
+                except:
+                    print(f'Failed to liquidate: {position.symbol}')
 
 # Wait for market to open
 async def run_await():
