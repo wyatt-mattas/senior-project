@@ -11,6 +11,7 @@ from calendar import monthrange
 import concurrent.futures
 from twilio.rest import Client
 import sys
+import traceback
 # VERSION LIQUID
 # ALPACA API KEYS
 base_url = 'https://paper-api.alpaca.markets'
@@ -20,8 +21,9 @@ api_secret = open('C:\\Account IDs\\AlpacaAPISecretOrig.txt', 'r').read()
 account_sid = open('C:\\Account IDs\\SID.txt', 'r').read()
 auth_token = open('C:\\Account IDs\\token.txt', 'r').read()
 
-#TODO need to work on shorting the market instead of just selling
+#TODO need to work on shorting the market
 #TODO work on after market buy and sell
+#TODO only sell amount of stocks to get RecT up to 200,000 -- sort stocks by performance
 class Calculations:
     def __init__(self, api):
         # initalize some variables
@@ -83,10 +85,11 @@ class Calculations:
         count = 0
         for ticker in ticker_list: # TODO can mabe use workers for this as well
             df_list[f'{ticker}'] = self._api.get_barset(symbols=ticker, timeframe='1Min', start=prev_date,end=end_date, limit=50).df
-            df_list[f'{ticker}'].columns = df_list[f'{ticker}'].columns.droplevel()
-            df_list[f'{ticker}'] = self.calc_ema(df_list[f'{ticker}'])
             if df_list[f'{ticker}'].empty == True: # check if list is empty
                 del df_list[f'{ticker}']
+            else:
+                df_list[f'{ticker}'].columns = df_list[f'{ticker}'].columns.droplevel()
+                df_list[f'{ticker}'] = self.calc_ema(df_list[f'{ticker}'])
             count += 1
             if count%200 == 0:
                 time.sleep(61)
@@ -198,29 +201,31 @@ channels = []
 
 # wait for the market to open
 async def awaitMarketOpen():
+    isOpen = api.get_clock().is_open
+    timeList = []
+    c = 0
     global df_ticker_list
     global ticker_list
     global channels
-    notOpen = True
-    while notOpen == True:
+    while not isOpen: #TODO fix this
         try:
-            ct = datetime.datetime.now().strftime('%H:%M') # get current time
-            cts = datetime.datetime.now().strftime('%H:%M:%S')
+            clock = api.get_clock()
+            openingTime = clock.next_open.replace(tzinfo=datetime.timezone.utc).timestamp()
+            currTime = clock.timestamp.replace(tzinfo=datetime.timezone.utc).timestamp()
+            timeToOpen = int((openingTime - currTime) / 60)
+            if timeToOpen not in timeList:
+                print(str(timeToOpen) + ' minutes til market open.')
+                timeList.clear()
+            timeList.append(timeToOpen)
             # when there is a 5 minutes till open we want to grab our data
-            if cts == '08:25:00':
-                df_ticker_list, ticker_list = await ema.grab_data()
-                channels = ['AM.' + symbol for symbol in ticker_list]
-                time.sleep(1.1)
-            if cts == '18:01:00':
-                equity = float(api.get_account().equity)
-                last_equity = float(api.get_account().last_equity)
-                price_change = round(equity - last_equity, 2)
-                client.messages.create(from_='+13343732933',to='+16207578055',body=f'Current Equity: ${equity}\nPrice Change: ${str(price_change)}')
-                time.sleep(1.1)
-            ct = datetime.datetime.now().strftime('%H:%M')
-            time.sleep(0.1)
-            if ct == '08:30':
-                notOpen = False
+            if timeToOpen == 5:
+                c += 1
+                if c == 1:
+                    df_ticker_list, ticker_list = await ema.grab_data()
+                    channels = ['AM.' + symbol for symbol in ticker_list]
+                    time.sleep(1)
+            time.sleep(3)
+            isOpen = api.get_clock().is_open
         except Exception as e:
             print('Await Market Open Error')
             print(f'Error: {str(e)}')
@@ -234,21 +239,9 @@ async def awaitMarketOpen():
     except Exception as e:
         print('Grab data Error')
         print(f'Error: {str(e)}')
+        print(traceback.format_exc())
         client.messages.create(from_='+13343732933',to='+16207578055',body=f'Grab data Error\nError: {str(e)}')
         sys.exit()
-
-    positions = api.list_positions() # grab open positions
-    if positions != [] :
-        for position in positions:
-            if position.symbol not in ticker_list: # want to sell off tickers that have not closed yet
-                try:
-                    api.close_position(position.symbol)
-                    print(f'Liquidated: {position.symbol}')
-                except Exception as e:
-                    print(f'Failed to liquidate: {position.symbol}')
-                    print(f'Error: {str(e)}')
-                    client.messages.create(from_='+13343732933',to='+16207578055',body=f'Failed to liquidate\nError: {str(e)}')
-                    sys.exit()
 
 # Wait for market to open
 async def run_await():
@@ -282,25 +275,38 @@ def calc_faster(data_list):
 
 # main loop of getting minute data
 async def subscribe():
+    c = 0
     while True: # making the loop run forever
         await run_await()
-        open = True
-        while open == True:
+        isOpen = api.get_clock().is_open
+        while isOpen == True: # making sure the market is still open
             await conn.subscribe(channels) # get data for the stock that we want
             if data != []:
                 calc_faster(data)
-            ct = datetime.datetime.now().strftime('%H:%M')
-            cts = datetime.datetime.now().strftime('%H:%M:%S')
-            if cts == '11:00:00':
+            clock = api.get_clock()
+            closingTime = clock.next_close.replace(tzinfo=datetime.timezone.utc).timestamp()
+            currTime = clock.timestamp.replace(tzinfo=datetime.timezone.utc).timestamp()
+            timeToClose = int((closingTime - currTime) / 60)
+            if timeToClose == 3: # if 5 minutes to close, close all positions at market value
+                c += 1
+                if c == 1: # only want to do this want, will help out with timeout problems
+                    positions = api.list_positions()
+                    if positions != []:
+                        try:
+                            api.close_all_positions()
+                            await asyncio.sleep(300)
+                        except Exception as e:
+                            print('Close all Positions Error')
+                            print(f'Error: {str(e)}')
+            isOpen = api.get_clock().is_open
+            if isOpen == False:
+                await conn.unsubscribe(channels)
+                print('Market Closed')
                 equity = float(api.get_account().equity)
                 last_equity = float(api.get_account().last_equity)
                 price_change = round(equity - last_equity, 2)
                 client.messages.create(from_='+13343732933',to='+16207578055',body=f'Current Equity: ${equity}\nPrice Change: ${str(price_change)}')
-                time.sleep(1.1)
-            if ct == '15:00':
-                open = False
-                await conn.unsubscribe(channels)
-                print('Market Closed')
+            await asyncio.sleep(2) # sleep otherwise is_open will timeout
 
 if __name__ == '__main__':
     # main loop and should continue forever unless an error is thrown
