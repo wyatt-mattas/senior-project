@@ -24,6 +24,7 @@ auth_token = open('C:\\Account IDs\\token.txt', 'r').read()
 #TODO need to work on shorting the market
 #TODO work on after market buy and sell
 #TODO only sell amount of stocks to get RecT up to 200,000 -- sort stocks by performance
+#TODO limit only 200 requests for treadpool or limit amout of stocks to look at
 class Calculations:
     def __init__(self, api):
         # initalize some variables
@@ -89,21 +90,21 @@ class Calculations:
                 del df_list[f'{ticker}']
             else:
                 df_list[f'{ticker}'].columns = df_list[f'{ticker}'].columns.droplevel()
-                df_list[f'{ticker}'] = await self.calc_ema(df_list[f'{ticker}'])
+                df_list[f'{ticker}'] = self.calc_ema(df_list[f'{ticker}'])
             count += 1
             if count%200 == 0:
                 time.sleep(61)
         return df_list, ticker_list
 
     # calculate the moving average for the dataframe
-    async def calc_ema(self,dataframe):
+    def calc_ema(self,dataframe):
         dataframe['ema5'] = ta.EMA(dataframe['close'],timeperiod=5)
         dataframe['ema10'] = ta.EMA(dataframe['close'],timeperiod=10)
         dataframe['ema20'] = ta.EMA(dataframe['close'],timeperiod=20)
         return dataframe
 
     # check to see if we should buy or to sell
-    async def buy_sell_calc(self, dataframe, ticker):
+    def buy_sell_calc(self, dataframe, ticker): 
         # make sure we get the actual symbol
         ticker_symbol = ticker['symbol']
         # check if we can sell
@@ -111,25 +112,25 @@ class Calculations:
         if (dataframe['ema5'][dataframe.index[-1]] > dataframe['ema10'][dataframe.index[-1]] and dataframe['ema5'][dataframe.index[-1]] > dataframe['ema20'][dataframe.index[-1]] and dataframe['ema10'][dataframe.index[-1]] > dataframe['ema20'][dataframe.index[-1]]):
             if (dataframe['ema5'][dataframe.index[-2]] > dataframe['ema10'][dataframe.index[-2]] and dataframe['ema5'][dataframe.index[-2]] > dataframe['ema20'][dataframe.index[-2]] and dataframe['ema10'][dataframe.index[-2]] > dataframe['ema20'][dataframe.index[-2]]): # making sure the it is tending to move upwards
                 if (((dataframe['ema5'][dataframe.index[-1]]-dataframe['ema10'][dataframe.index[-1]])/dataframe['ema10'][dataframe.index[-1]]*100) > .5 and ((dataframe['ema5'][dataframe.index[-1]]-dataframe['ema20'][dataframe.index[-1]])/dataframe['ema20'][dataframe.index[-1]]*100) > 2):
-                    if await self.get_positions_sell(ticker_symbol) is not None:
-                        qty, orderside = await self.get_positions_sell(ticker_symbol)
+                    if self.get_positions_sell(ticker_symbol) is not None:
+                        qty, orderside = self.get_positions_sell(ticker_symbol)
                         if orderside == 'long':
                             #limit_price = round(dataframe['close'][dataframe.index[-1]],2) #TODO either take out limit for sell or make it from low column not close
-                            await self.submitOrder_sell(qty,ticker_symbol,'sell')
+                            self.submitOrder_sell(qty,ticker_symbol,'sell')
         # check if we can buy
         if (dataframe['ema5'][dataframe.index[-1]] < dataframe['ema10'][dataframe.index[-1]] and dataframe['ema5'][dataframe.index[-1]] < dataframe['ema20'][dataframe.index[-1]] and dataframe['ema10'][dataframe.index[-1]] < dataframe['ema20'][dataframe.index[-1]]):
             if (dataframe['ema5'][dataframe.index[-2]] < dataframe['ema10'][dataframe.index[-2]] and dataframe['ema5'][dataframe.index[-2]] < dataframe['ema20'][dataframe.index[-2]] and dataframe['ema10'][dataframe.index[-2]] < dataframe['ema20'][dataframe.index[-2]]):
                 if (dataframe['ema5'][dataframe.index[-3]] < dataframe['ema10'][dataframe.index[-3]] and dataframe['ema5'][dataframe.index[-3]] < dataframe['ema20'][dataframe.index[-3]] and dataframe['ema10'][dataframe.index[-3]] < dataframe['ema20'][dataframe.index[-3]]):
-                    can_buy = await self.get_positions_buy(ticker_symbol)
+                    can_buy = self.get_positions_buy(ticker_symbol)
                     if can_buy == True:
-                        quantity = await self.calc_num_of_stocks(dataframe)
+                        quantity = self.calc_num_of_stocks(dataframe)
                         #limit = round(dataframe['close'][dataframe.index[-1]],2)
                         stop = str(round(dataframe['close'][dataframe.index[-1]]*.95,2))
                         stop_loss = {"stop_price": stop, "limit_price": stop}
-                        await self.submitOrder_buy(quantity,ticker_symbol,'buy',stop_loss)
+                        self.submitOrder_buy(quantity,ticker_symbol,'buy',stop_loss)
 
     # function for submitting buy order
-    async def submitOrder_buy(self, qty, stock, side, stop):
+    def submitOrder_buy(self, qty, stock, side, stop):
         if qty > 0:
             try:
                 self._api.submit_order(stock, qty, side, 'market', 'day', stop_loss=stop) # TODO might need to get of limit price
@@ -140,7 +141,7 @@ class Calculations:
         else:
             print('Quantity is 0, order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | not completed.')
     # function for submitting sell order
-    async def submitOrder_sell(self, qty, stock, side):
+    def submitOrder_sell(self, qty, stock, side):
         if qty > 0:
             try:
                 self._api.submit_order(stock, qty, side, 'market', 'day')
@@ -152,7 +153,7 @@ class Calculations:
             print('Quantity is 0, order of | ' + str(qty) + ' ' + stock + ' ' + side + ' | not completed.')
 
     # calculate the number of stocks that we want to buy
-    async def calc_num_of_stocks(self, dataframe):
+    def calc_num_of_stocks(self, dataframe):
         portfolio_value = float(self._api.get_account().buying_power) # TODO might make this equity or actual cash, might be screwing up buying power after market closes with negative cash and open positions
         rough_number = (portfolio_value * self.risk) / dataframe['low'][dataframe.index[-1]]
         quantity = round(rough_number) # make sure it is an even number
@@ -161,7 +162,7 @@ class Calculations:
         return quantity
 
     # get stock to sell based on if there is already a position
-    async def get_positions_sell(self, ticker):
+    def get_positions_sell(self, ticker):
         positions = self._api.list_positions()
         if positions != []:
             for position in positions:
@@ -172,7 +173,7 @@ class Calculations:
                         return qty, orderSide
 
     # see if there is a position already there, if so we do not want to buy
-    async def get_positions_buy(self, ticker):
+    def get_positions_buy(self, ticker):
         positions = self._api.list_positions()
         can_buy = False
         if positions == []:
@@ -259,18 +260,18 @@ async def on_minute_bars(conn, channel, bars):
     # Append minute data to list otherwise packets will time out and cause an error
 
 # Calculate what do do with every stock and update every stock in list
-async def calc_everything(data_list):
+def calc_everything(data_list):
     y = {'open': data_list['open'],'high':data_list['high'],'low':data_list['low'],'close':data_list['close'],'volume':data_list['volume']}
     symbol = data_list['symbol']
     df_ticker_list[symbol] = df_ticker_list[symbol].append(y, ignore_index=True)
-    df_ticker_list[symbol] = await calc.calc_ema(df_ticker_list[symbol])
-    await calc.buy_sell_calc(df_ticker_list[symbol], data_list)
+    df_ticker_list[symbol] = calc.calc_ema(df_ticker_list[symbol])
+    calc.buy_sell_calc(df_ticker_list[symbol], data_list)
 
 # using ThreadPoolExecutor run calc_everything using workers to increase speed of program
-async def calc_faster(data_list):
+def calc_faster(data_list):
     with concurrent.futures.ThreadPoolExecutor(
                 max_workers=10) as executor:
-            {executor.submit(await calc_everything,i): i for i in data_list}
+            {executor.submit(calc_everything,i): i for i in data_list}
     data_list.clear() # clear data list so there can be new data in an empty list
 
 # main loop of getting minute data
@@ -282,7 +283,7 @@ async def subscribe():
         while isOpen == True: # making sure the market is still open
             await conn.subscribe(channels) # get data for the stock that we want
             if data != []:
-                await calc_faster(data)
+                calc_faster(data) # TODO work on sleeping with so many stocks or only have so many
             clock = api.get_clock()
             closingTime = clock.next_close.replace(tzinfo=datetime.timezone.utc).timestamp()
             currTime = clock.timestamp.replace(tzinfo=datetime.timezone.utc).timestamp()
