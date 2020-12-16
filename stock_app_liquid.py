@@ -104,28 +104,32 @@ class Calculations:
         return dataframe
 
     # check to see if we should buy or to sell
-    def buy_sell_calc(self, dataframe, ticker): 
+    def buy_sell_calc(self, dataframe, ticker):
         # make sure we get the actual symbol
         ticker_symbol = ticker['symbol']
+        positions = self._api.list_positions()
         # check if we can sell
         #TODO can probably add check if ticker_symbol postion is None so that it doesn't have to calculate all of this
-        if (dataframe['ema5'][dataframe.index[-1]] > dataframe['ema10'][dataframe.index[-1]] and dataframe['ema5'][dataframe.index[-1]] > dataframe['ema20'][dataframe.index[-1]] and dataframe['ema10'][dataframe.index[-1]] > dataframe['ema20'][dataframe.index[-1]]):
-            if (dataframe['ema5'][dataframe.index[-2]] > dataframe['ema10'][dataframe.index[-2]] and dataframe['ema5'][dataframe.index[-2]] > dataframe['ema20'][dataframe.index[-2]] and dataframe['ema10'][dataframe.index[-2]] > dataframe['ema20'][dataframe.index[-2]]): # making sure the it is tending to move upwards
-                if (((dataframe['ema5'][dataframe.index[-1]]-dataframe['ema10'][dataframe.index[-1]])/dataframe['ema10'][dataframe.index[-1]]*100) > .5 and ((dataframe['ema5'][dataframe.index[-1]]-dataframe['ema20'][dataframe.index[-1]])/dataframe['ema20'][dataframe.index[-1]]*100) > 2):
-                    if self.get_positions_sell(ticker_symbol) is not None:
-                        qty, orderside = self.get_positions_sell(ticker_symbol)
+        if (dataframe['ema5'][dataframe.index[-1]] < dataframe['ema10'][dataframe.index[-1]] and dataframe['ema5'][dataframe.index[-1]] < dataframe['ema20'][dataframe.index[-1]] and dataframe['ema10'][dataframe.index[-1]] < dataframe['ema20'][dataframe.index[-1]]):
+            if (dataframe['ema5'][dataframe.index[-2]] < dataframe['ema10'][dataframe.index[-2]] and dataframe['ema5'][dataframe.index[-2]] < dataframe['ema20'][dataframe.index[-2]] and dataframe['ema10'][dataframe.index[-2]] < dataframe['ema20'][dataframe.index[-2]]): # making sure the it is tending to move upwards
+                #if (((dataframe['ema5'][dataframe.index[-1]]-dataframe['ema10'][dataframe.index[-1]])/dataframe['ema10'][dataframe.index[-1]]*100) > .5 and ((dataframe['ema5'][dataframe.index[-1]]-dataframe['ema20'][dataframe.index[-1]])/dataframe['ema20'][dataframe.index[-1]]*100) > 2):
+                    #TODO probably need to change this last if statement
+                if (dataframe['ema5'][dataframe.index[-3]] > dataframe['ema10'][dataframe.index[-3]] and dataframe['ema5'][dataframe.index[-3]] > dataframe['ema20'][dataframe.index[-3]] and dataframe['ema10'][dataframe.index[-3]] > dataframe['ema20'][dataframe.index[-3]]):
+                    # ^this is the new last if might make it similar and better
+                    if self.get_positions_sell(ticker_symbol, positions) is not None:
+                        qty, orderside = self.get_positions_sell(ticker_symbol, positions)
                         if orderside == 'long':
                             #limit_price = round(dataframe['close'][dataframe.index[-1]],2) #TODO either take out limit for sell or make it from low column not close
                             self.submitOrder_sell(qty,ticker_symbol,'sell')
         # check if we can buy
-        if (dataframe['ema5'][dataframe.index[-1]] < dataframe['ema10'][dataframe.index[-1]] and dataframe['ema5'][dataframe.index[-1]] < dataframe['ema20'][dataframe.index[-1]] and dataframe['ema10'][dataframe.index[-1]] < dataframe['ema20'][dataframe.index[-1]]):
+        if (dataframe['ema5'][dataframe.index[-1]] > dataframe['ema10'][dataframe.index[-1]] and dataframe['ema5'][dataframe.index[-1]] < dataframe['ema20'][dataframe.index[-1]] and dataframe['ema10'][dataframe.index[-1]] < dataframe['ema20'][dataframe.index[-1]]):
             if (dataframe['ema5'][dataframe.index[-2]] < dataframe['ema10'][dataframe.index[-2]] and dataframe['ema5'][dataframe.index[-2]] < dataframe['ema20'][dataframe.index[-2]] and dataframe['ema10'][dataframe.index[-2]] < dataframe['ema20'][dataframe.index[-2]]):
                 if (dataframe['ema5'][dataframe.index[-3]] < dataframe['ema10'][dataframe.index[-3]] and dataframe['ema5'][dataframe.index[-3]] < dataframe['ema20'][dataframe.index[-3]] and dataframe['ema10'][dataframe.index[-3]] < dataframe['ema20'][dataframe.index[-3]]):
-                    can_buy = self.get_positions_buy(ticker_symbol)
+                    can_buy = self.get_positions_buy(ticker_symbol, positions)
                     if can_buy == True:
                         quantity = self.calc_num_of_stocks(dataframe)
                         #limit = round(dataframe['close'][dataframe.index[-1]],2)
-                        stop = str(round(dataframe['close'][dataframe.index[-1]]*.95,2))
+                        stop = str(round(dataframe['close'][dataframe.index[-1]]*.97,2))
                         stop_loss = {"stop_price": stop, "limit_price": stop}
                         self.submitOrder_buy(quantity,ticker_symbol,'buy',stop_loss)
 
@@ -162,8 +166,8 @@ class Calculations:
         return quantity
 
     # get stock to sell based on if there is already a position
-    def get_positions_sell(self, ticker):
-        positions = self._api.list_positions()
+    def get_positions_sell(self, ticker, position):
+        positions = position
         if positions != []:
             for position in positions:
                 if position.symbol == ticker:
@@ -173,8 +177,8 @@ class Calculations:
                         return qty, orderSide
 
     # see if there is a position already there, if so we do not want to buy
-    def get_positions_buy(self, ticker):
-        positions = self._api.list_positions()
+    def get_positions_buy(self, ticker, position):
+        positions = position
         can_buy = False
         if positions == []:
             can_buy = True
@@ -231,7 +235,6 @@ async def awaitMarketOpen():
             print('Await Market Open Error')
             print(f'Error: {str(e)}')
             client.messages.create(from_='+13343732933',to='+16207578055',body=f'Await Market Open Error\nError: {str(e)}')
-            sys.exit()
 
     try:
         if df_ticker_list == [] and ticker_list == [] and channels == []:
@@ -294,8 +297,10 @@ async def subscribe():
                     positions = api.list_positions()
                     if positions != []:
                         try:
+                            print('Closing all positions...')
                             api.close_all_positions()
                             await asyncio.sleep(360)
+                            print('Closed all positions!')
                         except Exception as e:
                             print('Close all Positions Error')
                             print(f'Error: {str(e)}')
