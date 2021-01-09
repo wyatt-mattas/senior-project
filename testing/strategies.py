@@ -1,4 +1,5 @@
 import backtrader as bt
+import pandas as pd
 #from numba import jit, cuda
 
 class LongOnly(bt.Sizer):
@@ -143,8 +144,20 @@ class RSIStrat(bt.Strategy):
 
         # Reset orders
         self.order = None
-
+    '''
+    work on reducing negative sells with checking the price change percentage for 5ish minutes
+    '''
     def next(self):
+        prices = [self.fast_ema[0],self.slow_ema[0]]
+
+        price_series = pd.Series(prices)
+        price_change = price_series.pct_change()
+        ema_price_change = price_change[1]
+        # c = 0
+        # for i in price_change:
+        #     if i <= .003 and i >= -.003:
+        #         c += 1
+
         if self.order:
             return
         #if the symbol is overbought
@@ -158,7 +171,7 @@ class RSIStrat(bt.Strategy):
                 pass
         #if the symbol is oversold
         elif self.rsi[0] <= self.params.rsiLow and self.fast_ema[0] < self.slow_ema[0]:
-            if self.in_position:
+            if self.in_position or self.rsi[0] <= 10 or ema_price_change < .00001:
                 pass
             #buy if not in position
             else:
@@ -191,3 +204,74 @@ class RSIStrat(bt.Strategy):
     #         if len(self) >= (self.bar_executed + 4):
     #             self.log(f'CLOSE CREATE {self.dataclose[0]:2f}')
     #             self.order = self.close()
+
+class RSIStratBreakout(bt.Strategy):
+    #TODO breakout strat
+    '''
+    should have to be several minutes below a certain rsi value with ema verification to buy
+    should have to be several minutes above a certain rsi value with ema verification to sell
+    need to wait for it to cross into the middle zone to execute trades
+    need to work on middle zone values, rsi value(probably bigger)
+    and make sure the ema values are still good for verifying rsi indicators
+    '''
+    params = (('pfast',3),('pslow',11),('rsi',6),('rsiLow',30),('rsiHigh',70))
+
+    def log(self, txt, dt=None):
+        dt = dt or self.datas[0].datetime.date(0)
+        #print(f'{dt.isoformat()} {txt}') # Comment this line when running optimization
+
+    def __init__(self):
+        self.dataclose = self.datas[0].close
+        #self.bought = False
+        self.in_position = False
+		# Order variable will contain ongoing order details/status
+        self.order = None
+        self.fast_ema = bt.indicators.EMA(self.dataclose, period=self.params.pfast)
+        self.slow_ema = bt.indicators.EMA(self.dataclose, period=self.params.pslow)
+        self.rsi = bt.talib.RSI(self.dataclose, timeperiod=self.params.rsi)
+
+    def notify_order(self, order):
+        #bought = self.bought
+
+        if order.status in [order.Submitted, order.Accepted]:
+            # An active Buy/Sell order has been submitted/accepted - Nothing to do
+            return
+
+        # Check if an order has been completed
+        # Attention: broker could reject order if not enough cash
+        if order.status in [order.Completed]:
+            if order.isbuy():
+                #self.log(f'BUY EXECUTED, {order.executed.price:.2f}')
+                self.log('BUY EXECUTED, %.2f' % self.dataclose[0])
+            elif order.issell():
+                #self.log(f'SELL EXECUTED, {order.executed.price:.2f}')
+                self.log('SELL EXECUTED, %.2f' % self.dataclose[0])
+            self.bar_executed = len(self)
+
+        elif order.status in [order.Canceled, order.Margin, order.Rejected]:
+            self.log('Order Canceled/Margin/Rejected')
+
+        # Reset orders
+        self.order = None
+    #Version 1
+    def next(self):
+        if self.order:
+            return
+        #if the symbol is overbought
+        if self.rsi[0] <= self.params.rsiHigh and self.rsi[-1] >= self.params.rsiHigh and self.rsi[-2] >= self.params.rsiHigh and self.rsi[-3] >= self.params.rsiHigh and self.rsi[-4] >= self.params.rsiHigh and self.fast_ema[0] > self.slow_ema[0]:
+            #if in position is true, sell
+            if self.in_position:
+                #print("Sell")
+                self.order = self.sell()
+                self.in_position = False
+            else:
+                pass
+        #if the symbol is oversold
+        elif self.rsi[0] >= self.params.rsiLow and self.rsi[-1] <= self.params.rsiLow and self.rsi[-2] <= self.params.rsiLow and self.rsi[-3] <= self.params.rsiLow and self.rsi[-4] <= self.params.rsiLow and self.fast_ema[0] < self.slow_ema[0]:
+            if self.in_position:
+                pass
+            #buy if not in position
+            else:
+                #print("Buy")
+                self.order = self.buy()
+                self.in_position = True
