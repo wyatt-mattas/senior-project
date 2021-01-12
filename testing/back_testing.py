@@ -3,11 +3,11 @@ import csv
 import datetime
 import backtrader.feeds as btfeeds
 from strategies import MAcrossover, RSIStrat, RSIStratBreakout
-import logging
+#import logging
 from backtrader_plotting import Bokeh
 # from strategies import LongOnly
 # from numba import jit, cuda
-logger = logging.getLogger(__name__)
+#logger = logging.getLogger(__name__)
 cerebro = bt.Cerebro()
 
 cerebro.broker.set_cash(10000.0)
